@@ -202,6 +202,8 @@ type PaymentSettings struct {
 	FixedRules       []FixedPaymentRule       `json:"fixedRules,omitempty"`
 	FieldAmountRules []FieldAmountPaymentRule `json:"fieldAmountRules,omitempty"`
 	LineItems        []PaymentLineItem        `json:"lineItems,omitempty"`
+	// Name of the email field whose value prefills Stripe Checkout. Nil = use the first email field.
+	CustomerEmailFieldName *string `json:"customerEmailFieldName,omitempty"`
 }
 
 // FormRequest is the create/update body for a form.

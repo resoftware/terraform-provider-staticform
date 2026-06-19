@@ -358,10 +358,11 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 func paymentToClient(ctx context.Context, p paymentModel) (*client.PaymentSettings, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	ps := &client.PaymentSettings{
-		Enabled:      true,
-		ConnectionID: strPtr(optStr(p.ConnectionID)),
-		Currency:     optStr(p.Currency),
-		Mode:         optStr(p.Mode),
+		Enabled:                true,
+		ConnectionID:           strPtr(optStr(p.ConnectionID)),
+		Currency:               optStr(p.Currency),
+		Mode:                   optStr(p.Mode),
+		CustomerEmailFieldName: strPtr(optStr(p.CustomerEmailFieldName)),
 	}
 	for _, r := range p.FixedRule {
 		ps.FixedRules = append(ps.FixedRules, client.FixedPaymentRule{
@@ -391,9 +392,10 @@ func paymentToClient(ctx context.Context, p paymentModel) (*client.PaymentSettin
 
 func paymentToModel(p *client.PaymentSettings) paymentModel {
 	m := paymentModel{
-		ConnectionID: strFromPtr(p.ConnectionID),
-		Currency:     types.StringValue(p.Currency),
-		Mode:         types.StringValue(p.Mode),
+		ConnectionID:           strFromPtr(p.ConnectionID),
+		Currency:               types.StringValue(p.Currency),
+		Mode:                   types.StringValue(p.Mode),
+		CustomerEmailFieldName: strFromPtr(p.CustomerEmailFieldName),
 	}
 	for _, r := range p.FixedRules {
 		m.FixedRule = append(m.FixedRule, fixedRuleModel{

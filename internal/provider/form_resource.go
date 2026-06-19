@@ -209,12 +209,13 @@ type lineItemModel struct {
 }
 
 type paymentModel struct {
-	ConnectionID    types.String           `tfsdk:"connection_id"`
-	Currency        types.String           `tfsdk:"currency"`
-	Mode            types.String           `tfsdk:"mode"`
-	FixedRule       []fixedRuleModel       `tfsdk:"fixed_rule"`
-	FieldAmountRule []fieldAmountRuleModel `tfsdk:"field_amount_rule"`
-	LineItem        []lineItemModel        `tfsdk:"line_item"`
+	ConnectionID           types.String           `tfsdk:"connection_id"`
+	Currency               types.String           `tfsdk:"currency"`
+	Mode                   types.String           `tfsdk:"mode"`
+	CustomerEmailFieldName types.String           `tfsdk:"customer_email_field_name"`
+	FixedRule              []fixedRuleModel       `tfsdk:"fixed_rule"`
+	FieldAmountRule        []fieldAmountRuleModel `tfsdk:"field_amount_rule"`
+	LineItem               []lineItemModel        `tfsdk:"line_item"`
 }
 
 func (r *formResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -404,9 +405,10 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Validators:          []validator.List{listvalidator.SizeAtMost(1)},
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
-						"connection_id": schema.StringAttribute{Required: true, MarkdownDescription: "Stripe connection ID."},
-						"currency":      schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.RegexMatches(currencyRegexp, "must be a 3-letter ISO 4217 currency code")}, MarkdownDescription: "ISO 4217 currency code (lowercase, e.g. `eur`)."},
-						"mode":          schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Fixed", "FieldAmount", "LineItems")}, MarkdownDescription: "`Fixed`, `FieldAmount`, or `LineItems`."},
+						"connection_id":             schema.StringAttribute{Required: true, MarkdownDescription: "Stripe connection ID."},
+						"currency":                  schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.RegexMatches(currencyRegexp, "must be a 3-letter ISO 4217 currency code")}, MarkdownDescription: "ISO 4217 currency code (lowercase, e.g. `eur`)."},
+						"mode":                      schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Fixed", "FieldAmount", "LineItems")}, MarkdownDescription: "`Fixed`, `FieldAmount`, or `LineItems`."},
+						"customer_email_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used."},
 					},
 					Blocks: map[string]schema.Block{
 						"fixed_rule": schema.ListNestedBlock{

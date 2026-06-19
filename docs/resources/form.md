@@ -119,6 +119,7 @@ Required:
 
 Optional:
 
+- `customer_email_field_name` (String) Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used.
 - `field_amount_rule` (Block List) Amount-from-field rules (mode `FieldAmount`). (see [below for nested schema](#nestedblock--payment--field_amount_rule))
 - `fixed_rule` (Block List) Fixed-amount pricing rules (mode `Fixed`). (see [below for nested schema](#nestedblock--payment--fixed_rule))
 - `line_item` (Block List) Line items priced from fields (mode `LineItems`). (see [below for nested schema](#nestedblock--payment--line_item))
