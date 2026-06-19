@@ -236,7 +236,7 @@ Optional:
 - `spreadsheet_id` (String) Google Sheets: spreadsheet ID.
 - `static_attachment` (Block List) Email: attach a static file (Pro plan). Provide `source` to upload a local file automatically, or `s3_key` (+ metadata) to reference one already in the form-uploads bucket. (see [below for nested schema](#nestedblock--submit_action--static_attachment))
 - `subject` (String) Email: subject. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{formName}}`, `{{form.email}}`, `{{timestamp}}`).
-- `webhook_url` (String) Webhook: target URL.
+- `webhook_url` (String) Webhook: target URL. Supports the same `{{token}}` template variables as `body_template` (e.g. `https://api.example.com/users/{{form.username}}`); substituted values are URL-encoded automatically.
 - `write_header_if_empty` (Boolean) Google Sheets: write a header row if the sheet is empty.
 
 Read-Only:
