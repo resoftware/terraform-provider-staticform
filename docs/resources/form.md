@@ -81,8 +81,8 @@ output "form_id" {
 - `field` (Block List) An input field. Order is preserved. (see [below for nested schema](#nestedblock--field))
 - `honeypot_field_name` (String) Name of the honeypot field.
 - `language_detection_fields` (List of String) Field names to run language detection against. Empty means all text fields.
-- `payment` (Block List) Stripe payment collection (Pro plan). At most one block. Requires a Stripe connection ID. (see [below for nested schema](#nestedblock--payment))
-- `redirect` (Block List) Redirect behaviour after submission (client-side forms only). (see [below for nested schema](#nestedblock--redirect))
+- `payment` (Block List) Stripe payment collection (Pro plan). At most one block. Requires a Stripe connection ID. When set, a `redirect` block with both `success` and `error` is required, because paid forms can only respond with an HTTP redirect (the buyer returns from Stripe Checkout via a redirect). (see [below for nested schema](#nestedblock--payment))
+- `redirect` (Block List) Redirect behaviour after submission (client-side forms only). Required with both `success` and `error` when a `payment` block is present. (see [below for nested schema](#nestedblock--redirect))
 - `submission_mode` (String) `ClientSide` (browser submissions, full spam protection) or `ServerSide` (backend submissions, requires the server secret).
 - `submit_action` (Block List) An action run on submission. `type` selects which fields apply. (see [below for nested schema](#nestedblock--submit_action))
 - `tags` (Set of String) Up to 20 tags (1-50 chars each) for organizing forms.

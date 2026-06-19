@@ -32,9 +32,10 @@ var (
 )
 
 var (
-	_ resource.Resource                = (*formResource)(nil)
-	_ resource.ResourceWithConfigure   = (*formResource)(nil)
-	_ resource.ResourceWithImportState = (*formResource)(nil)
+	_ resource.Resource                   = (*formResource)(nil)
+	_ resource.ResourceWithConfigure      = (*formResource)(nil)
+	_ resource.ResourceWithImportState    = (*formResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*formResource)(nil)
 )
 
 // NewFormResource constructs the staticform_form resource.
@@ -222,6 +223,29 @@ func (r *formResource) Metadata(_ context.Context, req resource.MetadataRequest,
 	resp.TypeName = req.ProviderTypeName + "_form"
 }
 
+// ValidateConfig enforces cross-block rules the per-attribute validators cannot express.
+func (r *formResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var m formResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// A payment form sends the submitter to Stripe Checkout, which only returns them via an HTTP
+	// redirect. Both the success and error outcomes must therefore be configured as redirects.
+	if len(m.Payment) > 0 {
+		hasBothRedirects := len(m.Redirect) > 0 && len(m.Redirect[0].Success) > 0 && len(m.Redirect[0].Error) > 0
+		if !hasBothRedirects {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("payment"),
+				"Payment forms require redirect responses",
+				"A form with a `payment` block must also define a `redirect` block with both `success` and `error` set. "+
+					"Payment forms can only respond with an HTTP redirect, because the buyer returns from Stripe Checkout via a redirect.",
+			)
+		}
+	}
+}
+
 func (r *formResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -392,7 +416,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				},
 			},
 			"redirect": schema.ListNestedBlock{
-				MarkdownDescription: "Redirect behaviour after submission (client-side forms only).",
+				MarkdownDescription: "Redirect behaviour after submission (client-side forms only). Required with both `success` and `error` when a `payment` block is present.",
 				NestedObject: schema.NestedBlockObject{
 					Blocks: map[string]schema.Block{
 						"success": redirectBranchBlock(),
@@ -401,7 +425,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				},
 			},
 			"payment": schema.ListNestedBlock{
-				MarkdownDescription: "Stripe payment collection (Pro plan). At most one block. Requires a Stripe connection ID.",
+				MarkdownDescription: "Stripe payment collection (Pro plan). At most one block. Requires a Stripe connection ID. When set, a `redirect` block with both `success` and `error` is required, because paid forms can only respond with an HTTP redirect (the buyer returns from Stripe Checkout via a redirect).",
 				Validators:          []validator.List{listvalidator.SizeAtMost(1)},
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
