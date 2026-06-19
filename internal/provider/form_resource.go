@@ -3,8 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -17,6 +22,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
+)
+
+// Shared regexes for form-level validation, matching the API's server-side rules.
+var (
+	fieldNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	langCodeRegexp  = regexp.MustCompile(`^[a-z]{3}$`)
+	currencyRegexp  = regexp.MustCompile(`^[a-zA-Z]{3}$`)
 )
 
 var (
@@ -241,10 +253,11 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				MarkdownDescription: "Form ID. This is the value to POST submissions to.",
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Human-readable form name."},
+			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Human-readable form name.", Validators: []validator.String{stringvalidator.LengthBetween(1, 255)}},
 			"submission_mode": schema.StringAttribute{
 				Optional: true, Computed: true,
 				Default:             stringdefault.StaticString("ClientSide"),
+				Validators:          []validator.String{stringvalidator.OneOf("ClientSide", "ServerSide")},
 				MarkdownDescription: "`ClientSide` (browser submissions, full spam protection) or `ServerSide` (backend submissions, requires the server secret).",
 			},
 			"server_submission_secret": schema.StringAttribute{
@@ -255,7 +268,8 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"captcha_type": schema.StringAttribute{
 				Optional: true, Computed: true,
 				Default:             stringdefault.StaticString("None"),
-				MarkdownDescription: "Captcha provider: `None`, `Recaptchav2`, `Recaptchav3`, `HCaptcha`, or `Cloudflare`.",
+				Validators:          []validator.String{stringvalidator.OneOf("None", "RecaptchaV2", "RecaptchaV3", "HCaptcha", "Turnstile")},
+				MarkdownDescription: "Captcha provider: `None`, `RecaptchaV2`, `RecaptchaV3`, `HCaptcha`, or `Turnstile` (Cloudflare Turnstile).",
 			},
 			"captcha_secret_key": schema.StringAttribute{
 				Optional: true, Sensitive: true,
@@ -276,6 +290,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"expected_languages": schema.ListAttribute{
 				Optional:            true,
 				ElementType:         types.StringType,
+				Validators:          []validator.List{listvalidator.ValueStringsAre(stringvalidator.RegexMatches(langCodeRegexp, "must be a 3-letter lowercase ISO 639-2/T code"))},
 				MarkdownDescription: "ISO 639-2/T codes (3 lowercase letters) allowed when language detection is on.",
 			},
 			"language_detection_fields": schema.ListAttribute{
@@ -286,6 +301,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"tags": schema.SetAttribute{
 				Optional:            true,
 				ElementType:         types.StringType,
+				Validators:          []validator.Set{setvalidator.SizeAtMost(20), setvalidator.ValueStringsAre(stringvalidator.LengthBetween(1, 50))},
 				MarkdownDescription: "Up to 20 tags (1-50 chars each) for organizing forms.",
 			},
 		},
@@ -294,12 +310,12 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				MarkdownDescription: "An input field. Order is preserved.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
-						"name":              schema.StringAttribute{Required: true, MarkdownDescription: "Field name. Lowercase, starts with a letter, `[a-z0-9_]`."},
-						"type":              schema.StringAttribute{Required: true, MarkdownDescription: "`Text`, `File`, `Number`, `Boolean`, `Enum`, `Datetime`, or `Date`."},
-						"rule":              schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("None"), MarkdownDescription: "Validation rule, e.g. `None`, `Email`, `Website`, `Number`, `FileExtension`."},
+						"name":              schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.LengthAtMost(255), stringvalidator.RegexMatches(fieldNameRegexp, "must start with a lowercase letter and contain only lowercase letters, digits, and underscores")}, MarkdownDescription: "Field name. Lowercase, starts with a letter, `[a-z0-9_]`."},
+						"type":              schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Text", "File", "Number", "Boolean", "Enum", "Datetime", "Date")}, MarkdownDescription: "`Text`, `File`, `Number`, `Boolean`, `Enum`, `Datetime`, or `Date`."},
+						"rule":              schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("None"), Validators: []validator.String{stringvalidator.OneOf("None", "Email", "Number", "PositiveNumber", "NumberRange", "Website", "Before", "After", "Between", "FileExtension", "FileSize")}, MarkdownDescription: "Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys."},
 						"required":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), MarkdownDescription: "Whether the field is required."},
-						"validation_config": schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Validation config (e.g. `maxLength`, `extensions`, `maxFileSizeBytes`)."},
-						"options":           schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "UI options (e.g. `isTextarea`, `options` JSON array, `allowMultiple`, `maxFiles`)."},
+						"validation_config": schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes)."},
+						"options":           schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `[\"Small\",\"Large\"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `maxFiles` (File, max number of files per submission)."},
 					},
 				},
 			},
@@ -308,24 +324,24 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"id":      schema.StringAttribute{Computed: true, MarkdownDescription: "Server-assigned action ID.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-						"type":    schema.StringAttribute{Required: true, MarkdownDescription: "`SendEmailAction`, `TriggerWebhookAction`, `SyncGoogleSheetsAction`, or `SyncNotionDatabaseAction`."},
+						"type":    schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("SendEmailAction", "TriggerWebhookAction", "SyncGoogleSheetsAction", "SyncNotionDatabaseAction")}, MarkdownDescription: "`SendEmailAction`, `TriggerWebhookAction`, `SyncGoogleSheetsAction`, or `SyncNotionDatabaseAction`."},
 						"name":    schema.StringAttribute{Required: true, MarkdownDescription: "Action label."},
 						"enabled": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), MarkdownDescription: "Whether the action runs."},
 
-						"recipient":          schema.StringAttribute{Optional: true, MarkdownDescription: "Email: recipient(s), comma-separated or `{{form.email}}`."},
-						"reply_to":           schema.StringAttribute{Optional: true, MarkdownDescription: "Email: reply-to address."},
-						"subject":            schema.StringAttribute{Optional: true, MarkdownDescription: "Email: subject (supports `{{form.field}}` templates)."},
-						"body_template":      schema.StringAttribute{Optional: true, MarkdownDescription: "Email/webhook: body template (HTML/JSON with `{{form.field}}`/`{{timestamp}}` tokens). For email this is the rendered content sent; for webhooks it is the request body."},
+						"recipient":          schema.StringAttribute{Optional: true, MarkdownDescription: "Email: recipient(s), comma-separated. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{form.email}}` to send to an address submitted in the form)."},
+						"reply_to":           schema.StringAttribute{Optional: true, MarkdownDescription: "Email: reply-to address. Supports `{{token}}` placeholders (e.g. `{{form.email}}`)."},
+						"subject":            schema.StringAttribute{Optional: true, MarkdownDescription: "Email: subject. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{formName}}`, `{{form.email}}`, `{{timestamp}}`)."},
+						"body_template":      schema.StringAttribute{Optional: true, MarkdownDescription: "Email body (HTML) or webhook request body. Supports `{{token}}` placeholders (spaces inside the braces are allowed): field values `{{fieldName}}` or `{{form.fieldName}}`; form metadata `{{formName}}`, `{{formId}}`, `{{submissionId}}`; all answers `{{submissionData}}` (formatted) or `{{submissionDataJson}}` (JSON object); date/time `{{timestamp}}`, `{{date}}`, `{{time}}` with optional zone and format, e.g. `{{timestamp:Europe/Amsterdam|yyyy-MM-dd HH:mm|notz}}` (`:zone` IANA/Windows timezone, `|format` .NET format string, `|notz` drops the ` UTC` suffix); and, when a `payment` block is present, `{{payment.amount}}`, `{{payment.amountCents}}`, `{{payment.currency}}`, `{{payment.status}}`, `{{payment.stripePaymentIntentId}}`, `{{payment.stripeCheckoutSessionId}}`. For email this is the rendered content sent; for webhooks it is the request body."},
 						"body_builder_state": schema.StringAttribute{Optional: true, MarkdownDescription: "Email: optional JSON state for the dashboard's visual email builder. `body_template` is the source of truth for what is sent; set this only to round-trip the visual builder."},
 						"disable_branding":   schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), MarkdownDescription: "Email: remove StaticForm branding (Agency plan)."},
-						"email_domain_id":    schema.StringAttribute{Optional: true, MarkdownDescription: "Email: send via a verified managed domain (`staticform_email_domain` ID). Mutually exclusive with `smtp_connection_id`."},
+						"email_domain_id":    schema.StringAttribute{Optional: true, Validators: []validator.String{stringvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("smtp_connection_id"))}, MarkdownDescription: "Email: send via a verified managed domain (`staticform_email_domain` ID). Mutually exclusive with `smtp_connection_id`."},
 						"smtp_connection_id": schema.StringAttribute{Optional: true, MarkdownDescription: "Email: send via a BYO SMTP connection (`staticform_smtp_connection` ID). Mutually exclusive with `email_domain_id`."},
 						"from_email":         schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, MarkdownDescription: "Email: From address (managed-domain path only; ignored for SMTP)."},
 						"from_name":          schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, MarkdownDescription: "Email: From display name (managed-domain path only; ignored for SMTP)."},
 
 						"webhook_url":  schema.StringAttribute{Optional: true, MarkdownDescription: "Webhook: target URL."},
-						"http_method":  schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, MarkdownDescription: "Webhook: `Get`, `Post`, `Put`, `Patch`, `Delete` (default `Post`)."},
-						"content_type": schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, MarkdownDescription: "Webhook: `Json` or `FormUrlEncoded` (default `Json`)."},
+						"http_method":  schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, Validators: []validator.String{stringvalidator.OneOf("Get", "Post", "Put", "Patch", "Delete")}, MarkdownDescription: "Webhook: `Get`, `Post`, `Put`, `Patch`, `Delete` (default `Post`)."},
+						"content_type": schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, Validators: []validator.String{stringvalidator.OneOf("Json", "FormUrlEncoded")}, MarkdownDescription: "Webhook: `Json` or `FormUrlEncoded` (default `Json`)."},
 						"headers":      schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Webhook: custom headers."},
 
 						"google_connection_id":  schema.StringAttribute{Optional: true, MarkdownDescription: "Google Sheets: OAuth connection ID."},
@@ -359,7 +375,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 							MarkdownDescription: "Email: attach a static file (Pro plan). Provide `source` to upload a local file automatically, or `s3_key` (+ metadata) to reference one already in the form-uploads bucket.",
 							NestedObject: schema.NestedBlockObject{
 								Attributes: map[string]schema.Attribute{
-									"source":       schema.StringAttribute{Optional: true, MarkdownDescription: "Path to a local file to upload. Mutually exclusive with `s3_key`."},
+									"source":       schema.StringAttribute{Optional: true, Validators: []validator.String{stringvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("s3_key"))}, MarkdownDescription: "Path to a local file to upload. Mutually exclusive with `s3_key`."},
 									"source_hash":  schema.StringAttribute{Optional: true, MarkdownDescription: "Optional content hash (e.g. `filesha256(...)`); changing it re-uploads `source`."},
 									"s3_key":       schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{uploadComputedString{}}, MarkdownDescription: "Object key in the form-uploads bucket. Computed when `source` is set."},
 									"file_name":    schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.String{uploadComputedString{}}, MarkdownDescription: "Display file name. Computed when `source` is set."},
@@ -389,15 +405,15 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"connection_id": schema.StringAttribute{Required: true, MarkdownDescription: "Stripe connection ID."},
-						"currency":      schema.StringAttribute{Required: true, MarkdownDescription: "ISO 4217 currency code (lowercase, e.g. `eur`)."},
-						"mode":          schema.StringAttribute{Required: true, MarkdownDescription: "`Fixed`, `FieldAmount`, or `LineItems`."},
+						"currency":      schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.RegexMatches(currencyRegexp, "must be a 3-letter ISO 4217 currency code")}, MarkdownDescription: "ISO 4217 currency code (lowercase, e.g. `eur`)."},
+						"mode":          schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Fixed", "FieldAmount", "LineItems")}, MarkdownDescription: "`Fixed`, `FieldAmount`, or `LineItems`."},
 					},
 					Blocks: map[string]schema.Block{
 						"fixed_rule": schema.ListNestedBlock{
 							MarkdownDescription: "Fixed-amount pricing rules (mode `Fixed`).",
 							NestedObject: schema.NestedBlockObject{
 								Attributes: map[string]schema.Attribute{
-									"amount_cents": schema.Int64Attribute{Required: true, MarkdownDescription: "Charge amount in the smallest currency unit."},
+									"amount_cents": schema.Int64Attribute{Required: true, Validators: []validator.Int64{int64validator.AtLeast(0)}, MarkdownDescription: "Charge amount in the smallest currency unit."},
 									"description":  schema.StringAttribute{Optional: true, MarkdownDescription: "Stripe line-item label."},
 								},
 							},
@@ -416,7 +432,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 							NestedObject: schema.NestedBlockObject{
 								Attributes: map[string]schema.Attribute{
 									"field_name":          schema.StringAttribute{Required: true, MarkdownDescription: "Enum field whose selected option sets the price."},
-									"price_map":           schema.MapAttribute{Required: true, ElementType: types.Int64Type, MarkdownDescription: "Map of option value to price (smallest currency unit)."},
+									"price_map":           schema.MapAttribute{Required: true, ElementType: types.Int64Type, Validators: []validator.Map{mapvalidator.ValueInt64sAre(int64validator.AtLeast(0))}, MarkdownDescription: "Map of option value to price (smallest currency unit)."},
 									"quantity_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Optional number field used as a quantity multiplier."},
 									"description":         schema.StringAttribute{Optional: true},
 								},
@@ -434,7 +450,7 @@ func notionPropertyBlock() schema.ListNestedBlock {
 		NestedObject: schema.NestedBlockObject{
 			Attributes: map[string]schema.Attribute{
 				"property_name":   schema.StringAttribute{Required: true, MarkdownDescription: "Notion property name."},
-				"property_type":   schema.StringAttribute{Required: true, MarkdownDescription: "Notion property type."},
+				"property_type":   schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("title", "rich_text", "email", "phone_number", "url", "number", "checkbox", "date", "select", "multi_select")}, MarkdownDescription: "Notion property type: `title`, `rich_text`, `email`, `phone_number`, `url`, `number`, `checkbox`, `date`, `select`, or `multi_select`. Unrecognized types fall back to `rich_text`."},
 				"form_field_name": schema.StringAttribute{Required: true, MarkdownDescription: "Form field to map from."},
 			},
 		},
@@ -447,14 +463,14 @@ func conditionGroupBlock(desc string) schema.ListNestedBlock {
 		Validators:          []validator.List{listvalidator.SizeAtMost(1)},
 		NestedObject: schema.NestedBlockObject{
 			Attributes: map[string]schema.Attribute{
-				"connector": schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("And"), MarkdownDescription: "`And` or `Or` joining the conditions."},
+				"connector": schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("And"), Validators: []validator.String{stringvalidator.OneOf("And", "Or")}, MarkdownDescription: "`And` or `Or` joining the conditions."},
 			},
 			Blocks: map[string]schema.Block{
 				"condition": schema.ListNestedBlock{
 					NestedObject: schema.NestedBlockObject{
 						Attributes: map[string]schema.Attribute{
 							"field_name":     schema.StringAttribute{Required: true},
-							"operator":       schema.StringAttribute{Required: true, MarkdownDescription: "`Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`."},
+							"operator":       schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Equals", "NotEmpty", "IsEmpty", "Contains", "MatchesRegex", "NotMatchesRegex")}, MarkdownDescription: "`Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`."},
 							"value":          schema.StringAttribute{Optional: true},
 							"case_sensitive": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
 						},
@@ -506,7 +522,7 @@ func redirectBranchBlock() schema.ListNestedBlock {
 	return schema.ListNestedBlock{
 		NestedObject: schema.NestedBlockObject{
 			Attributes: map[string]schema.Attribute{
-				"type":       schema.StringAttribute{Required: true, MarkdownDescription: "`InternalPage` or `CustomUrl`."},
+				"type":       schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("InternalPage", "CustomUrl")}, MarkdownDescription: "`InternalPage` or `CustomUrl`."},
 				"custom_url": schema.StringAttribute{Optional: true, MarkdownDescription: "Target URL when type is `CustomUrl`."},
 				"message":    schema.StringAttribute{Optional: true, MarkdownDescription: "Message shown for `InternalPage`."},
 			},

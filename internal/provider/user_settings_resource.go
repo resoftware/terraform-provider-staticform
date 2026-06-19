@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
@@ -63,7 +65,7 @@ func (r *userSettingsResource) Schema(_ context.Context, _ resource.SchemaReques
 			"email_overage_enabled":                      schema.BoolAttribute{Optional: true, Computed: true, MarkdownDescription: "Allow email overage charges beyond the plan quota."},
 			"email_quota_warning_enabled":                schema.BoolAttribute{Optional: true, Computed: true, MarkdownDescription: "Warn at 80%/95% of the email quota."},
 			"storage_warning_enabled":                    schema.BoolAttribute{Optional: true, Computed: true, MarkdownDescription: "Warn at 80%/90% of storage."},
-			"submission_overview_email_frequency":        schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: "Submission summary cadence: `Off`, `Daily`, `Weekly`, or `Monthly`."},
+			"submission_overview_email_frequency":        schema.StringAttribute{Optional: true, Computed: true, Validators: []validator.String{stringvalidator.OneOf("Off", "Daily", "Weekly", "Monthly")}, MarkdownDescription: "Submission summary cadence: `Off`, `Daily`, `Weekly`, or `Monthly`."},
 		},
 	}
 }

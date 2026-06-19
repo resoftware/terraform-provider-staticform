@@ -74,7 +74,7 @@ output "form_id" {
 ### Optional
 
 - `captcha_secret_key` (String, Sensitive) Captcha secret key. Required when `captcha_type` is not `None`.
-- `captcha_type` (String) Captcha provider: `None`, `Recaptchav2`, `Recaptchav3`, `HCaptcha`, or `Cloudflare`.
+- `captcha_type` (String) Captcha provider: `None`, `RecaptchaV2`, `RecaptchaV3`, `HCaptcha`, or `Turnstile` (Cloudflare Turnstile).
 - `enable_honeypot` (Boolean) Enable the honeypot spam trap field.
 - `enable_language_detection` (Boolean) Enable expected-language spam filtering.
 - `expected_languages` (List of String) ISO 639-2/T codes (3 lowercase letters) allowed when language detection is on.
@@ -102,10 +102,10 @@ Required:
 
 Optional:
 
-- `options` (Map of String) UI options (e.g. `isTextarea`, `options` JSON array, `allowMultiple`, `maxFiles`).
+- `options` (Map of String) UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `["Small","Large"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `maxFiles` (File, max number of files per submission).
 - `required` (Boolean) Whether the field is required.
-- `rule` (String) Validation rule, e.g. `None`, `Email`, `Website`, `Number`, `FileExtension`.
-- `validation_config` (Map of String) Validation config (e.g. `maxLength`, `extensions`, `maxFileSizeBytes`).
+- `rule` (String) Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys.
+- `validation_config` (Map of String) Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes).
 
 
 <a id="nestedblock--payment"></a>
@@ -208,7 +208,7 @@ Required:
 Optional:
 
 - `body_builder_state` (String) Email: optional JSON state for the dashboard's visual email builder. `body_template` is the source of truth for what is sent; set this only to round-trip the visual builder.
-- `body_template` (String) Email/webhook: body template (HTML/JSON with `{{form.field}}`/`{{timestamp}}` tokens). For email this is the rendered content sent; for webhooks it is the request body.
+- `body_template` (String) Email body (HTML) or webhook request body. Supports `{{token}}` placeholders (spaces inside the braces are allowed): field values `{{fieldName}}` or `{{form.fieldName}}`; form metadata `{{formName}}`, `{{formId}}`, `{{submissionId}}`; all answers `{{submissionData}}` (formatted) or `{{submissionDataJson}}` (JSON object); date/time `{{timestamp}}`, `{{date}}`, `{{time}}` with optional zone and format, e.g. `{{timestamp:Europe/Amsterdam|yyyy-MM-dd HH:mm|notz}}` (`:zone` IANA/Windows timezone, `|format` .NET format string, `|notz` drops the ` UTC` suffix); and, when a `payment` block is present, `{{payment.amount}}`, `{{payment.amountCents}}`, `{{payment.currency}}`, `{{payment.status}}`, `{{payment.stripePaymentIntentId}}`, `{{payment.stripeCheckoutSessionId}}`. For email this is the rendered content sent; for webhooks it is the request body.
 - `column_mapping` (Block List) (see [below for nested schema](#nestedblock--submit_action--column_mapping))
 - `content_type` (String) Webhook: `Json` or `FormUrlEncoded` (default `Json`).
 - `database_id` (String) Notion: database ID.
@@ -227,14 +227,14 @@ Optional:
 - `include_submission_id` (Boolean) Google Sheets: include a submission ID column.
 - `notion_connection_id` (String) Notion: connection ID.
 - `property_mapping` (Block List) (see [below for nested schema](#nestedblock--submit_action--property_mapping))
-- `recipient` (String) Email: recipient(s), comma-separated or `{{form.email}}`.
-- `reply_to` (String) Email: reply-to address.
+- `recipient` (String) Email: recipient(s), comma-separated. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{form.email}}` to send to an address submitted in the form).
+- `reply_to` (String) Email: reply-to address. Supports `{{token}}` placeholders (e.g. `{{form.email}}`).
 - `run_condition` (Block List) Optional: only run when these conditions match (Pro plan). (see [below for nested schema](#nestedblock--submit_action--run_condition))
 - `sheet_name` (String) Google Sheets: worksheet tab name.
 - `smtp_connection_id` (String) Email: send via a BYO SMTP connection (`staticform_smtp_connection` ID). Mutually exclusive with `email_domain_id`.
 - `spreadsheet_id` (String) Google Sheets: spreadsheet ID.
 - `static_attachment` (Block List) Email: attach a static file (Pro plan). Provide `source` to upload a local file automatically, or `s3_key` (+ metadata) to reference one already in the form-uploads bucket. (see [below for nested schema](#nestedblock--submit_action--static_attachment))
-- `subject` (String) Email: subject (supports `{{form.field}}` templates).
+- `subject` (String) Email: subject. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{formName}}`, `{{form.email}}`, `{{timestamp}}`).
 - `webhook_url` (String) Webhook: target URL.
 - `write_header_if_empty` (Boolean) Google Sheets: write a header row if the sheet is empty.
 
@@ -323,7 +323,7 @@ Required:
 
 - `form_field_name` (String) Form field to map from.
 - `property_name` (String) Notion property name.
-- `property_type` (String) Notion property type.
+- `property_type` (String) Notion property type: `title`, `rich_text`, `email`, `phone_number`, `url`, `number`, `checkbox`, `date`, `select`, or `multi_select`. Unrecognized types fall back to `rich_text`.
 
 
 <a id="nestedblock--submit_action--run_condition"></a>

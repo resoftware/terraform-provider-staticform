@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
@@ -65,10 +68,10 @@ func (r *smtpConnectionResource) Schema(_ context.Context, _ resource.SchemaRequ
 		Attributes: map[string]schema.Attribute{
 			"id":              schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"label":           schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "Human-readable label."},
-			"provider_preset": schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "Provider preset: `CustomSmtp`, `AwsSes`, `Mailgun`, `SendGrid`, `Postmark`, `Resend`, `Brevo`, `Mailjet`, `ZohoMail`, `GoogleWorkspace`, `Microsoft365`, `Mailtrap`, `Smtp2Go`."},
+			"provider_preset": schema.StringAttribute{Required: true, PlanModifiers: rr, Validators: []validator.String{stringvalidator.OneOf("CustomSmtp", "AwsSes", "Mailgun", "SendGrid", "Postmark", "Resend", "Brevo", "Mailjet", "ZohoMail", "GoogleWorkspace", "Microsoft365", "Mailtrap", "Smtp2Go")}, MarkdownDescription: "Provider preset: `CustomSmtp`, `AwsSes`, `Mailgun`, `SendGrid`, `Postmark`, `Resend`, `Brevo`, `Mailjet`, `ZohoMail`, `GoogleWorkspace`, `Microsoft365`, `Mailtrap`, `Smtp2Go`."},
 			"host":            schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "SMTP host."},
-			"port":            schema.Int64Attribute{Required: true, PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}, MarkdownDescription: "SMTP port (1-65535)."},
-			"security":        schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "`None`, `StartTls`, or `SslOnConnect`."},
+			"port":            schema.Int64Attribute{Required: true, PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}, Validators: []validator.Int64{int64validator.Between(1, 65535)}, MarkdownDescription: "SMTP port (1-65535)."},
+			"security":        schema.StringAttribute{Required: true, PlanModifiers: rr, Validators: []validator.String{stringvalidator.OneOf("None", "StartTls", "SslOnConnect")}, MarkdownDescription: "`None`, `StartTls`, or `SslOnConnect`."},
 			"username":        schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "SMTP username."},
 			"password":        schema.StringAttribute{Required: true, Sensitive: true, PlanModifiers: rr, MarkdownDescription: "SMTP password. Stored in state, never returned by the API."},
 			"from_email":      schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "From email address."},

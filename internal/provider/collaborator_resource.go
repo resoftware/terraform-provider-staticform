@@ -3,16 +3,22 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
 )
+
+// emailRegexp is a lenient sanity check; the server is the authority on validity.
+var emailRegexp = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
 var (
 	_ resource.Resource              = (*collaboratorResource)(nil)
@@ -65,7 +71,7 @@ func (r *collaboratorResource) Schema(_ context.Context, _ resource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"id":                       schema.StringAttribute{Computed: true, MarkdownDescription: "Stable identifier (`form_id:email`).", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"form_id":                  schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "Form to add the collaborator to."},
-			"email":                    schema.StringAttribute{Required: true, PlanModifiers: rr, MarkdownDescription: "Collaborator's email address."},
+			"email":                    schema.StringAttribute{Required: true, PlanModifiers: rr, Validators: []validator.String{stringvalidator.RegexMatches(emailRegexp, "must be a valid email address")}, MarkdownDescription: "Collaborator's email address."},
 			"status":                   schema.StringAttribute{Computed: true, MarkdownDescription: "`Pending` (invitation sent) or `Accepted`."},
 			"user_id":                  schema.StringAttribute{Computed: true, MarkdownDescription: "User ID, once the invitation is accepted."},
 			"can_view_form":            schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true)},

@@ -3,17 +3,23 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
 )
+
+// domainRegexp is a lenient sanity check; the server is the authority on validity.
+var domainRegexp = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
 
 var (
 	_ resource.Resource                = (*emailDomainResource)(nil)
@@ -90,6 +96,7 @@ func (r *emailDomainResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"domain_name": schema.StringAttribute{
 				Required:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Validators:          []validator.String{stringvalidator.RegexMatches(domainRegexp, "must be a valid domain name, e.g. example.com")},
 				MarkdownDescription: "Domain to send from, e.g. `example.com`.",
 			},
 			"mail_from_subdomain": schema.StringAttribute{
