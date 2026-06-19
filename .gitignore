@@ -1,0 +1,25 @@
+# Binaries
+terraform-provider-staticform
+*.exe
+dist/
+
+# Go
+*.test
+*.out
+vendor/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Local dev overrides
+.terraformrc
+terraform.rc
+
+# Editor
+.idea/
+.vscode/
+.DS_Store
