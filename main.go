@@ -21,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/resoftware/staticform",
+		Address: "registry.opentofu.org/resoftware/staticform",
 		Debug:   debug,
 	}
 

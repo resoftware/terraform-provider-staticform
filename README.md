@@ -1,8 +1,9 @@
-# Terraform / OpenTofu Provider for StaticForm
+# OpenTofu Provider for StaticForm
 
 Manage [StaticForm](https://staticform.app) forms, API keys, and integrations as
-code. The provider works with both Terraform and OpenTofu (same plugin protocol)
-and talks to the StaticForm REST API at `https://api.staticform.app`.
+code with [OpenTofu](https://opentofu.org). Published to the OpenTofu Registry;
+the same binary also works with Terraform (identical plugin protocol). Talks to
+the StaticForm REST API at `https://api.staticform.app`.
 
 ## Usage
 
@@ -51,16 +52,22 @@ Use an `sf_test_` key against a test environment by also setting `base_url`
 
 | Type | Name |
 |------|------|
-| Resource | `staticform_form` (fields + submit actions: email, webhook, Google Sheets, Notion) |
+| Resource | `staticform_form` (fields; submit actions for email, webhook, Google Sheets, Notion; redirect; payment; tags; email attachments) |
 | Resource | `staticform_api_key` |
 | Resource | `staticform_smtp_connection` |
 | Resource | `staticform_email_domain` |
+| Resource | `staticform_notion_connection` |
+| Resource | `staticform_stripe_connection` |
 | Resource | `staticform_collaborator` |
-| Data source | `staticform_form`, `staticform_forms` |
+| Resource | `staticform_user_settings` |
+| Data source | `staticform_form`, `staticform_forms`, `staticform_submissions` |
 | Data source | `staticform_api_key_permissions` |
+| Data source | `staticform_google_connections`, `staticform_notion_connections`, `staticform_stripe_connections` |
+| Data source | `staticform_subscription`, `staticform_user`, `staticform_execution_logs` |
 
-OAuth-backed connections (Google, Notion, Stripe) are created interactively in
-the dashboard and referenced by ID inside submit actions; they are not managed as
+Google connections use OAuth, so they are created interactively in the dashboard
+and referenced by ID (look them up with the `staticform_google_connections` data
+source). Notion and Stripe connections are token/key-based and **are** managed as
 resources.
 
 ## Development
@@ -69,14 +76,13 @@ resources.
 make build       # compile
 make test        # unit tests
 make testacc     # acceptance tests (needs STATICFORM_API_KEY, use an sf_test_ key)
-make docs        # regenerate docs/ from schema + examples (needs terraform on PATH)
+make docs        # regenerate docs/ from schema + examples (needs the tofu or terraform CLI on PATH)
 make snapshot    # local GoReleaser build to validate the release pipeline
 ```
 
 ### Local install for manual testing
 
-Point Terraform/OpenTofu at a locally built binary with a dev override in
-`~/.terraformrc`:
+Point OpenTofu at a locally built binary with a dev override in `~/.tofurc`:
 
 ```hcl
 provider_installation {
@@ -87,14 +93,19 @@ provider_installation {
 }
 ```
 
-Then `go install .` and run `terraform plan` against your config.
+Then `go install .` and run `tofu plan` against your config.
 
 ## Releasing
 
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions runs GoReleaser, which
-builds cross-platform binaries and a GPG-signed `SHA256SUMS` file for the
-Terraform Registry. The repo needs `GPG_PRIVATE_KEY` and `PASSPHRASE` secrets, and
-the matching public key registered with the Registry account.
+builds cross-platform binaries and a GPG-signed `SHA256SUMS` file. The repo needs
+`GPG_PRIVATE_KEY` and `PASSPHRASE` secrets.
+
+Publishing to the [OpenTofu Registry](https://search.opentofu.org) is a one-time
+submission to the [`opentofu/registry`](https://github.com/opentofu/registry)
+repo (add the `resoftware` namespace + GPG public key); thereafter each `vX.Y.Z`
+GitHub release is indexed automatically. The release artifacts are also
+Terraform-Registry compatible if you ever want to publish there too.
 
 ## License
 
