@@ -53,6 +53,11 @@ signs:
 
 release:
   draft: false
+  # The Terraform/OpenTofu registries read protocol versions from this manifest.
+  # Without it they assume protocol 5.0, which breaks a plugin-framework (v6) provider.
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
 changelog:
   disable: true
