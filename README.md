@@ -1,9 +1,10 @@
-# OpenTofu Provider for StaticForm
+# StaticForm Provider for Terraform & OpenTofu
 
 Manage [StaticForm](https://staticform.app) forms, API keys, and integrations as
-code with [OpenTofu](https://opentofu.org). Published to the OpenTofu Registry;
-the same binary also works with Terraform (identical plugin protocol). Talks to
-the StaticForm REST API at `https://api.staticform.app`.
+code. Published to both the [Terraform Registry](https://registry.terraform.io)
+and the [OpenTofu Registry](https://search.opentofu.org) from the same release
+(identical plugin protocol). Talks to the StaticForm REST API at
+`https://api.staticform.app`.
 
 ## Usage
 
@@ -82,7 +83,8 @@ make snapshot    # local GoReleaser build to validate the release pipeline
 
 ### Local install for manual testing
 
-Point OpenTofu at a locally built binary with a dev override in `~/.tofurc`:
+Point Terraform/OpenTofu at a locally built binary with a dev override in
+`~/.terraformrc` (Terraform) or `~/.tofurc` (OpenTofu):
 
 ```hcl
 provider_installation {
@@ -93,19 +95,21 @@ provider_installation {
 }
 ```
 
-Then `go install .` and run `tofu plan` against your config.
+Then `go install .` and run `terraform plan` / `tofu plan` against your config.
 
 ## Releasing
 
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions runs GoReleaser, which
 builds cross-platform binaries and a GPG-signed `SHA256SUMS` file. The repo needs
-`GPG_PRIVATE_KEY` and `PASSPHRASE` secrets.
+`GPG_PRIVATE_KEY` and `PASSPHRASE` secrets. The same release artifacts feed both
+registries; both verify with the same GPG public key.
 
-Publishing to the [OpenTofu Registry](https://search.opentofu.org) is a one-time
-submission to the [`opentofu/registry`](https://github.com/opentofu/registry)
-repo (add the `resoftware` namespace + GPG public key); thereafter each `vX.Y.Z`
-GitHub release is indexed automatically. The release artifacts are also
-Terraform-Registry compatible if you ever want to publish there too.
+- **Terraform Registry** — sign in at [registry.terraform.io](https://registry.terraform.io),
+  add the GPG public key under the `resoftware` organization, then
+  **Publish → Provider**. Subsequent tagged releases are indexed automatically.
+- **OpenTofu Registry** — one-time submission to the
+  [`opentofu/registry`](https://github.com/opentofu/registry) repo (add the
+  `resoftware` namespace + GPG public key); tagged releases are indexed thereafter.
 
 ## License
 
