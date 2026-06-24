@@ -291,9 +291,12 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 	m.SubmissionMode = types.StringValue(f.SubmissionMode)
 	m.ServerSubmissionSecret = strFromPtr(f.ServerSubmissionSecret)
 	m.CaptchaType = types.StringValue(f.CaptchaType)
-	if f.CaptchaSecretKey != nil {
-		m.CaptchaSecretKey = types.StringValue(*f.CaptchaSecretKey)
-	}
+	// captcha_secret_key is write-only: although the API returns it, we never
+	// read it back into state. Reading it would (a) store the live secret in
+	// state and (b) make import/refresh plan to overwrite or clear it (config
+	// can't echo a sensitive value). Leaving the prior config/state value
+	// untouched means an apply only ever sends the secret when it is explicitly
+	// set, so existing captcha secrets in production are never changed.
 	m.EnableHoneypot = types.BoolValue(f.EnableHoneypot)
 	m.HoneypotFieldName = types.StringValue(f.HoneypotFieldName)
 	m.EnableLanguageDetection = types.BoolValue(f.EnableLanguageDetection)

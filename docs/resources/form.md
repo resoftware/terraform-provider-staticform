@@ -73,7 +73,7 @@ output "form_id" {
 
 ### Optional
 
-- `captcha_secret_key` (String, Sensitive) Captcha secret key. Required when `captcha_type` is not `None`.
+- `captcha_secret_key` (String, Sensitive) Captcha secret key. Required when `captcha_type` is not `None`. Write-only: the value is sent on create/update but never read back into state, so importing a form does not capture it and an apply never overwrites the existing secret unless you set this explicitly.
 - `captcha_type` (String) Captcha provider: `None`, `RecaptchaV2`, `RecaptchaV3`, `HCaptcha`, or `Turnstile` (Cloudflare Turnstile).
 - `enable_honeypot` (Boolean) Enable the honeypot spam trap field.
 - `enable_language_detection` (Boolean) Enable expected-language spam filtering.

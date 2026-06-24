@@ -338,7 +338,7 @@ func (c *Client) ListForms(ctx context.Context) ([]FormListItem, error) {
 	page := 1
 	for {
 		var resp struct {
-			Items      []FormListItem `json:"items"`
+			Data       []FormListItem `json:"data"`
 			TotalCount int            `json:"totalCount"`
 			PageNumber int            `json:"pageNumber"`
 			PageSize   int            `json:"pageSize"`
@@ -347,8 +347,8 @@ func (c *Client) ListForms(ctx context.Context) ([]FormListItem, error) {
 		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 			return nil, err
 		}
-		all = append(all, resp.Items...)
-		if len(resp.Items) == 0 || len(all) >= resp.TotalCount {
+		all = append(all, resp.Data...)
+		if len(resp.Data) == 0 || len(all) >= resp.TotalCount {
 			break
 		}
 		page++

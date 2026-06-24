@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -55,4 +57,35 @@ func (uploadComputedInt64) PlanModifyInt64(ctx context.Context, req planmodifier
 		return
 	}
 	resp.PlanValue = req.StateValue
+}
+
+// jsonSemanticString suppresses diffs on string attributes that carry JSON which
+// the API may re-serialize (different whitespace or key order) without changing
+// meaning. When both the prior state and the planned config value parse as JSON
+// and are deeply equal, the planned value is pinned to the state value so no
+// spurious update is produced. Non-JSON content (e.g. an HTML email body) fails
+// to parse and is left to compare as a plain string, so behaviour is unchanged.
+type jsonSemanticString struct{}
+
+func (jsonSemanticString) Description(context.Context) string {
+	return "Suppress diffs between semantically-equal JSON values."
+}
+func (jsonSemanticString) MarkdownDescription(ctx context.Context) string {
+	return jsonSemanticString{}.Description(ctx)
+}
+
+func (jsonSemanticString) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.StateValue.IsNull() || req.ConfigValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	var stateJSON, planJSON any
+	if err := json.Unmarshal([]byte(req.StateValue.ValueString()), &stateJSON); err != nil {
+		return
+	}
+	if err := json.Unmarshal([]byte(req.PlanValue.ValueString()), &planJSON); err != nil {
+		return
+	}
+	if reflect.DeepEqual(stateJSON, planJSON) {
+		resp.PlanValue = req.StateValue
+	}
 }
