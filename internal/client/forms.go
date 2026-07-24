@@ -130,6 +130,7 @@ type EmailTemplateCustomization struct {
 	LogoURL                   *string `json:"logoUrl,omitempty"`
 	LogoWidth                 *int64  `json:"logoWidth,omitempty"`
 	LogoHeight                *int64  `json:"logoHeight,omitempty"`
+	HideLogo                  *bool   `json:"hideLogo,omitempty"`
 	HeaderText                *string `json:"headerText,omitempty"`
 	HideHeaderText            *bool   `json:"hideHeaderText,omitempty"`
 	SubtitleText              *string `json:"subtitleText,omitempty"`

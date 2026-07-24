@@ -270,6 +270,7 @@ Optional:
 - `header_text_color` (String) Header text color.
 - `header_text_color_dark` (String) Dark-mode header text color.
 - `hide_header_text` (Boolean) Hide the header text.
+- `hide_logo` (Boolean) Hide the logo.
 - `hide_sent_by` (Boolean) Hide the "sent by" line (Agency).
 - `hide_subtitle` (Boolean) Hide the subtitle.
 - `logo_height` (Number) Logo height in px.

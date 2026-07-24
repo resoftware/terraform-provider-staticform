@@ -152,6 +152,7 @@ type emailTemplateModel struct {
 	LogoURL                   types.String `tfsdk:"logo_url"`
 	LogoWidth                 types.Int64  `tfsdk:"logo_width"`
 	LogoHeight                types.Int64  `tfsdk:"logo_height"`
+	HideLogo                  types.Bool   `tfsdk:"hide_logo"`
 	HeaderText                types.String `tfsdk:"header_text"`
 	HideHeaderText            types.Bool   `tfsdk:"hide_header_text"`
 	SubtitleText              types.String `tfsdk:"subtitle_text"`
@@ -531,6 +532,7 @@ func emailTemplateBlock() schema.ListNestedBlock {
 				"logo_url":                     schema.StringAttribute{Optional: true, MarkdownDescription: "Logo image URL."},
 				"logo_width":                   schema.Int64Attribute{Optional: true, MarkdownDescription: "Logo width in px."},
 				"logo_height":                  schema.Int64Attribute{Optional: true, MarkdownDescription: "Logo height in px."},
+				"hide_logo":                    schema.BoolAttribute{Optional: true, MarkdownDescription: "Hide the logo."},
 				"header_text":                  schema.StringAttribute{Optional: true, MarkdownDescription: "Header text."},
 				"hide_header_text":             schema.BoolAttribute{Optional: true, MarkdownDescription: "Hide the header text."},
 				"subtitle_text":                schema.StringAttribute{Optional: true, MarkdownDescription: "Subtitle text."},
