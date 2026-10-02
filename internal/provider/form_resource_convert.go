@@ -248,28 +248,28 @@ func emailTemplateToClient(m emailTemplateModel) *client.EmailTemplateCustomizat
 
 func emailTemplateToModel(c *client.EmailTemplateCustomization) emailTemplateModel {
 	return emailTemplateModel{
-		PrimaryColor:              strFromPtr(c.PrimaryColor),
-		HeaderTextColor:           strFromPtr(c.HeaderTextColor),
-		FooterBackgroundColor:     strFromPtr(c.FooterBackgroundColor),
-		FooterTextColor:           strFromPtr(c.FooterTextColor),
-		BodyBackgroundColor:       strFromPtr(c.BodyBackgroundColor),
-		BodyTextColor:             strFromPtr(c.BodyTextColor),
-		PrimaryColorDark:          strFromPtr(c.PrimaryColorDark),
-		HeaderTextColorDark:       strFromPtr(c.HeaderTextColorDark),
-		FooterBackgroundColorDark: strFromPtr(c.FooterBackgroundColorDark),
-		FooterTextColorDark:       strFromPtr(c.FooterTextColorDark),
-		BodyBackgroundColorDark:   strFromPtr(c.BodyBackgroundColorDark),
-		BodyTextColorDark:         strFromPtr(c.BodyTextColorDark),
-		LogoURL:                   strFromPtr(c.LogoURL),
+		PrimaryColor:              nullIfEmptyPtr(c.PrimaryColor),
+		HeaderTextColor:           nullIfEmptyPtr(c.HeaderTextColor),
+		FooterBackgroundColor:     nullIfEmptyPtr(c.FooterBackgroundColor),
+		FooterTextColor:           nullIfEmptyPtr(c.FooterTextColor),
+		BodyBackgroundColor:       nullIfEmptyPtr(c.BodyBackgroundColor),
+		BodyTextColor:             nullIfEmptyPtr(c.BodyTextColor),
+		PrimaryColorDark:          nullIfEmptyPtr(c.PrimaryColorDark),
+		HeaderTextColorDark:       nullIfEmptyPtr(c.HeaderTextColorDark),
+		FooterBackgroundColorDark: nullIfEmptyPtr(c.FooterBackgroundColorDark),
+		FooterTextColorDark:       nullIfEmptyPtr(c.FooterTextColorDark),
+		BodyBackgroundColorDark:   nullIfEmptyPtr(c.BodyBackgroundColorDark),
+		BodyTextColorDark:         nullIfEmptyPtr(c.BodyTextColorDark),
+		LogoURL:                   nullIfEmptyPtr(c.LogoURL),
 		LogoWidth:                 int64FromPtr(c.LogoWidth),
 		LogoHeight:                int64FromPtr(c.LogoHeight),
 		HideLogo:                  boolFromPtr(c.HideLogo),
-		HeaderText:                strFromPtr(c.HeaderText),
+		HeaderText:                nullIfEmptyPtr(c.HeaderText),
 		HideHeaderText:            boolFromPtr(c.HideHeaderText),
-		SubtitleText:              strFromPtr(c.SubtitleText),
+		SubtitleText:              nullIfEmptyPtr(c.SubtitleText),
 		HideSubtitle:              boolFromPtr(c.HideSubtitle),
-		FooterText:                strFromPtr(c.FooterText),
-		SentByText:                strFromPtr(c.SentByText),
+		FooterText:                nullIfEmptyPtr(c.FooterText),
+		SentByText:                nullIfEmptyPtr(c.SentByText),
 		HideSentBy:                boolFromPtr(c.HideSentBy),
 		ShowFormID:                boolFromPtr(c.ShowFormID),
 	}
@@ -355,10 +355,15 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 	// order, so reorder the response to follow the prior model (config/state)
 	// order — matching by server ID first, then by name — to avoid spurious
 	// positional diffs. Newly added actions fall to the end.
-	ordered := orderSubmitActions(m.SubmitActions, f.SubmitActions)
+	prior := m.SubmitActions
+	ordered, priorIdx := orderSubmitActions(prior, f.SubmitActions)
 	m.SubmitActions = nil
-	for _, a := range ordered {
-		m.SubmitActions = append(m.SubmitActions, actionToModel(a))
+	for i, a := range ordered {
+		am := actionToModel(a)
+		if priorIdx[i] >= 0 {
+			keepEmptyActionStrings(&am, prior[priorIdx[i]])
+		}
+		m.SubmitActions = append(m.SubmitActions, am)
 	}
 
 	if f.RedirectSettings != nil && (f.RedirectSettings.Success != nil || f.RedirectSettings.Error != nil) {
@@ -449,12 +454,14 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 // orderSubmitActions returns incoming actions ordered to follow prior (the
 // configured/state order), matching each prior entry by server ID when present
 // and falling back to name. Unmatched incoming actions are appended in their
-// original order.
-func orderSubmitActions(prior []submitActionModel, incoming []client.SubmitAction) []client.SubmitAction {
+// original order. The second result holds, per returned action, the index of
+// the matched prior entry, or -1.
+func orderSubmitActions(prior []submitActionModel, incoming []client.SubmitAction) ([]client.SubmitAction, []int) {
 	used := make([]bool, len(incoming))
 	out := make([]client.SubmitAction, 0, len(incoming))
+	priorIdx := make([]int, 0, len(incoming))
 
-	for _, p := range prior {
+	for pi, p := range prior {
 		pid := optStr(p.ID)
 		pname := optStr(p.Name)
 		idx := -1
@@ -477,14 +484,16 @@ func orderSubmitActions(prior []submitActionModel, incoming []client.SubmitActio
 		if idx >= 0 {
 			used[idx] = true
 			out = append(out, incoming[idx])
+			priorIdx = append(priorIdx, pi)
 		}
 	}
 	for i, a := range incoming {
 		if !used[i] {
 			out = append(out, a)
+			priorIdx = append(priorIdx, -1)
 		}
 	}
-	return out
+	return out, priorIdx
 }
 
 func actionToModel(a client.SubmitAction) submitActionModel {
@@ -494,21 +503,21 @@ func actionToModel(a client.SubmitAction) submitActionModel {
 		Name:               types.StringValue(a.Name),
 		Enabled:            types.BoolValue(a.Enabled),
 		Recipient:          nullIfEmpty(a.Recipient),
-		ReplyTo:            strFromPtr(a.ReplyTo),
-		Subject:            strFromPtr(a.Subject),
+		ReplyTo:            nullIfEmptyPtr(a.ReplyTo),
+		Subject:            nullIfEmptyPtr(a.Subject),
 		BodyTemplate:       nullIfEmpty(a.BodyTemplate),
 		WebhookURL:         nullIfEmpty(a.WebhookURL),
 		HTTPMethod:         nullIfEmpty(a.HTTPMethod),
 		ContentType:        nullIfEmpty(a.ContentType),
 		Headers:            toStringMap(a.Headers),
-		GoogleConnectionID: strFromPtr(a.GoogleOAuthConnectionID),
+		GoogleConnectionID: nullIfEmptyPtr(a.GoogleOAuthConnectionID),
 		SpreadsheetID:      nullIfEmpty(a.SpreadsheetID),
 		SheetName:          nullIfEmpty(a.SheetName),
-		NotionConnectionID: strFromPtr(a.NotionConnectionID),
+		NotionConnectionID: nullIfEmptyPtr(a.NotionConnectionID),
 		DatabaseID:         nullIfEmpty(a.DatabaseID),
 		DatabaseName:       nullIfEmpty(a.DatabaseName),
-		EmailDomainID:      strFromPtr(a.EmailDomainID),
-		SMTPConnectionID:   strFromPtr(a.SMTPConnectionID),
+		EmailDomainID:      nullIfEmptyPtr(a.EmailDomainID),
+		SMTPConnectionID:   nullIfEmptyPtr(a.SMTPConnectionID),
 	}
 
 	// Type-specific computed-default fields live on a single shared block, so set
@@ -518,9 +527,9 @@ func actionToModel(a client.SubmitAction) submitActionModel {
 	isSheets := a.Type == client.ActionSyncGoogleSheets
 	if isEmail {
 		m.DisableBranding = types.BoolValue(a.DisableBranding)
-		m.FromEmail = strFromPtr(a.FromEmail)
-		m.FromName = strFromPtr(a.FromName)
-		m.BodyBuilderState = strFromPtr(a.BodyBuilderState)
+		m.FromEmail = nullIfEmptyPtr(a.FromEmail)
+		m.FromName = nullIfEmptyPtr(a.FromName)
+		m.BodyBuilderState = nullIfEmptyPtr(a.BodyBuilderState)
 		if a.CustomEmailTemplate != nil {
 			m.EmailTemplate = []emailTemplateModel{emailTemplateToModel(a.CustomEmailTemplate)}
 		}
@@ -717,6 +726,114 @@ func nullIfEmpty(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+// nullIfEmptyPtr converts a *string to a Terraform string, treating nil and ""
+// alike as null so an imported empty value does not end up as `""` in config.
+func nullIfEmptyPtr(p *string) types.String {
+	if p == nil {
+		return types.StringNull()
+	}
+	return nullIfEmpty(*p)
+}
+
+// keepEmptyPrior resolves an optional string the API returns as null or "" when
+// empty, while the provider sends "" as null. When both the returned and the
+// prior (plan or state) value are empty, the prior value is kept so `""` and an
+// unset attribute both round-trip. An unknown prior is never kept.
+func keepEmptyPrior(got *types.String, prior types.String) {
+	if optStr(*got) == "" && !prior.IsUnknown() && optStr(prior) == "" {
+		*got = prior
+	}
+}
+
+// keepEmptyActionStrings applies keepEmptyPrior to every optional string of a
+// submit action built from an API response, including its nested email
+// template and conditions, against the matching prior action.
+func keepEmptyActionStrings(m *submitActionModel, prior submitActionModel) {
+	for _, p := range []struct {
+		got   *types.String
+		prior types.String
+	}{
+		{&m.Recipient, prior.Recipient},
+		{&m.ReplyTo, prior.ReplyTo},
+		{&m.Subject, prior.Subject},
+		{&m.BodyTemplate, prior.BodyTemplate},
+		{&m.BodyBuilderState, prior.BodyBuilderState},
+		{&m.EmailDomainID, prior.EmailDomainID},
+		{&m.SMTPConnectionID, prior.SMTPConnectionID},
+		{&m.FromEmail, prior.FromEmail},
+		{&m.FromName, prior.FromName},
+		{&m.WebhookURL, prior.WebhookURL},
+		{&m.HTTPMethod, prior.HTTPMethod},
+		{&m.ContentType, prior.ContentType},
+		{&m.GoogleConnectionID, prior.GoogleConnectionID},
+		{&m.SpreadsheetID, prior.SpreadsheetID},
+		{&m.SheetName, prior.SheetName},
+		{&m.NotionConnectionID, prior.NotionConnectionID},
+		{&m.DatabaseID, prior.DatabaseID},
+		{&m.DatabaseName, prior.DatabaseName},
+	} {
+		keepEmptyPrior(p.got, p.prior)
+	}
+
+	if len(m.EmailTemplate) > 0 && len(prior.EmailTemplate) > 0 {
+		keepEmptyTemplateStrings(&m.EmailTemplate[0], prior.EmailTemplate[0])
+	}
+	keepEmptyConditionStrings(m.RunCondition, prior.RunCondition)
+	if len(m.FieldAttachments) == len(prior.FieldAttachments) {
+		for i := range m.FieldAttachments {
+			keepEmptyConditionStrings(m.FieldAttachments[i].Condition, prior.FieldAttachments[i].Condition)
+		}
+	}
+	if len(m.StaticAttachments) == len(prior.StaticAttachments) {
+		for i := range m.StaticAttachments {
+			keepEmptyConditionStrings(m.StaticAttachments[i].Condition, prior.StaticAttachments[i].Condition)
+		}
+	}
+}
+
+func keepEmptyTemplateStrings(m *emailTemplateModel, prior emailTemplateModel) {
+	for _, p := range []struct {
+		got   *types.String
+		prior types.String
+	}{
+		{&m.PrimaryColor, prior.PrimaryColor},
+		{&m.HeaderTextColor, prior.HeaderTextColor},
+		{&m.FooterBackgroundColor, prior.FooterBackgroundColor},
+		{&m.FooterTextColor, prior.FooterTextColor},
+		{&m.BodyBackgroundColor, prior.BodyBackgroundColor},
+		{&m.BodyTextColor, prior.BodyTextColor},
+		{&m.PrimaryColorDark, prior.PrimaryColorDark},
+		{&m.HeaderTextColorDark, prior.HeaderTextColorDark},
+		{&m.FooterBackgroundColorDark, prior.FooterBackgroundColorDark},
+		{&m.FooterTextColorDark, prior.FooterTextColorDark},
+		{&m.BodyBackgroundColorDark, prior.BodyBackgroundColorDark},
+		{&m.BodyTextColorDark, prior.BodyTextColorDark},
+		{&m.LogoURL, prior.LogoURL},
+		{&m.HeaderText, prior.HeaderText},
+		{&m.SubtitleText, prior.SubtitleText},
+		{&m.FooterText, prior.FooterText},
+		{&m.SentByText, prior.SentByText},
+	} {
+		keepEmptyPrior(p.got, p.prior)
+	}
+}
+
+// keepEmptyConditionStrings matches condition blocks by position, as Terraform
+// compares nested list blocks positionally.
+func keepEmptyConditionStrings(got, prior []runConditionModel) {
+	if len(got) != len(prior) {
+		return
+	}
+	for i := range got {
+		if len(got[i].Conditions) != len(prior[i].Conditions) {
+			continue
+		}
+		for j := range got[i].Conditions {
+			keepEmptyPrior(&got[i].Conditions[j].Value, prior[i].Conditions[j].Value)
+		}
+	}
 }
 
 // explicitList returns a pointer to the slice, or to an empty slice when nil,
