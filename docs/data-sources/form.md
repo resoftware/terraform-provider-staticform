@@ -21,5 +21,7 @@ Look up an existing StaticForm form by ID.
 
 ### Read-Only
 
+- `ai_spam_review_excluded_fields` (List of String) Field names never sent to the AI spam reviewer. Null when the API does not report it.
+- `enable_ai_spam_review` (Boolean) Whether uncertain submissions are sent to an AI model for a second spam opinion. Null when the API does not report it.
 - `name` (String) Form name.
 - `submission_mode` (String) `ClientSide` or `ServerSide`.

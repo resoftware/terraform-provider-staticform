@@ -16,6 +16,15 @@ A StaticForm form: its fields, spam protection, redirect behaviour, and submit a
 resource "staticform_form" "contact" {
   name = "Contact form"
 
+  # Only accept submissions from your own site (and its subdomains).
+  enable_allowed_domains = true
+  allowed_domains        = ["example.com"]
+
+  # Ask an AI model for a second opinion on doubtful submissions, but never
+  # send it the submitter's email address.
+  enable_ai_spam_review          = true
+  ai_spam_review_excluded_fields = ["email"]
+
   field {
     name     = "email"
     type     = "Text"
@@ -73,8 +82,12 @@ output "form_id" {
 
 ### Optional
 
+- `ai_spam_review_excluded_fields` (List of String) Field names whose values are never sent to the AI spam reviewer, for example fields holding sensitive personal data. Matched case-insensitively. Empty or unset means all fields may be sent.
+- `allowed_domains` (List of String) Up to 50 hostnames the form may be submitted from, used when `enable_allowed_domains` is on. A domain also covers its subdomains, so `example.com` allows `www.example.com`. Use the bare lowercase hostname (no scheme, path, port or `*.` prefix; punycode for internationalized domains).
 - `captcha_secret_key` (String, Sensitive) Captcha secret key. Required when `captcha_type` is not `None`. Write-only: the value is sent on create/update but never read back into state, so importing a form does not capture it and an apply never overwrites the existing secret unless you set this explicitly.
 - `captcha_type` (String) Captcha provider: `None`, `RecaptchaV2`, `RecaptchaV3`, `HCaptcha`, or `Turnstile` (Cloudflare Turnstile).
+- `enable_ai_spam_review` (Boolean) Send submissions the rule-based spam checks are unsure about to an AI model for a second opinion. When not set, the current server value is kept: new forms are created with it enabled, forms that existed before the setting was introduced have it disabled. Set it explicitly to manage it.
+- `enable_allowed_domains` (Boolean) Only accept submissions whose `Origin` header (or `Referer`, when there is no `Origin`) matches one of `allowed_domains`. Requires at least one domain. Server-side forms skip this check.
 - `enable_honeypot` (Boolean) Enable the honeypot spam trap field.
 - `enable_language_detection` (Boolean) Enable expected-language spam filtering.
 - `expected_languages` (List of String) ISO 639-2/T codes (3 lowercase letters) allowed when language detection is on.
@@ -102,7 +115,7 @@ Required:
 
 Optional:
 
-- `options` (Map of String) UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `["Small","Large"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `maxFiles` (File, max number of files per submission).
+- `options` (Map of String) UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `["Small","Large"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `isNameField` (Text with rule `None`, `true` marks the field as a person's name so digits in the submitted value count toward the spam score; the dashboard's Name field template sets it); `maxFiles` (File, max number of files per submission).
 - `required` (Boolean) Whether the field is required.
 - `rule` (String) Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys.
 - `validation_config` (Map of String) Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes).

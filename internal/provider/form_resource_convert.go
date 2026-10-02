@@ -45,6 +45,16 @@ func (r *formResource) toRequest(ctx context.Context, m formResourceModel) (clie
 	diags.Append(dldf...)
 	body.LanguageDetectionFields = ldf
 
+	body.EnableAllowedDomains = boolPtr(m.EnableAllowedDomains)
+	domains, dd := stringList(ctx, m.AllowedDomains)
+	diags.Append(dd...)
+	body.AllowedDomains = explicitList(domains)
+
+	body.EnableAiSpamReview = boolPtr(m.EnableAiSpamReview)
+	excluded, dex := stringList(ctx, m.AiSpamReviewExcluded)
+	diags.Append(dex...)
+	body.AiSpamReviewExcludedFields = explicitList(excluded)
+
 	if len(m.Payment) > 0 {
 		ps, dp := paymentToClient(ctx, m.Payment[0])
 		diags.Append(dp...)
@@ -312,6 +322,12 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 	} else {
 		m.LanguageDetectionFields = types.ListNull(types.StringType)
 	}
+	// Older API versions don't return these settings. Keep the planned/prior
+	// value then, so a provider release never breaks on an API that lags behind.
+	m.EnableAllowedDomains = boolFromResponse(f.EnableAllowedDomains, m.EnableAllowedDomains, types.BoolValue(false))
+	m.AllowedDomains = listFromResponse(f.AllowedDomains, m.AllowedDomains)
+	m.EnableAiSpamReview = boolFromResponse(f.EnableAiSpamReview, m.EnableAiSpamReview, types.BoolNull())
+	m.AiSpamReviewExcluded = listFromResponse(f.AiSpamReviewExcludedFields, m.AiSpamReviewExcluded)
 	if len(f.Tags) > 0 {
 		m.Tags = toStringSet(f.Tags)
 	} else {
@@ -701,4 +717,46 @@ func nullIfEmpty(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+// explicitList returns a pointer to the slice, or to an empty slice when nil,
+// so the field is always sent and an unset list clears the server value.
+func explicitList(in []string) *[]string {
+	if in == nil {
+		in = []string{}
+	}
+	return &in
+}
+
+// boolFromResponse resolves a bool setting the API may omit. A returned value
+// wins. Otherwise a known prior value is kept, and a null or unknown one
+// becomes fallback.
+func boolFromResponse(resp *bool, prior types.Bool, fallback types.Bool) types.Bool {
+	if resp != nil {
+		return types.BoolValue(*resp)
+	}
+	if prior.IsNull() || prior.IsUnknown() {
+		return fallback
+	}
+	return prior
+}
+
+// listFromResponse resolves a string-list setting the API may omit. When it is
+// omitted the prior value is kept (unknown becomes null). An empty returned list
+// becomes null, unless the prior value is a known empty list, so both an unset
+// attribute and an explicit `[]` round-trip without a diff.
+func listFromResponse(resp *[]string, prior types.List) types.List {
+	if resp == nil {
+		if prior.IsUnknown() {
+			return types.ListNull(types.StringType)
+		}
+		return prior
+	}
+	if len(*resp) == 0 {
+		if !prior.IsNull() && !prior.IsUnknown() && len(prior.Elements()) == 0 {
+			return prior
+		}
+		return types.ListNull(types.StringType)
+	}
+	return toStringList(*resp)
 }

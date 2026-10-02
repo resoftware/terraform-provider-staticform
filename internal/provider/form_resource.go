@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -28,7 +29,9 @@ import (
 var (
 	fieldNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	langCodeRegexp  = regexp.MustCompile(`^[a-z]{3}$`)
-	currencyRegexp  = regexp.MustCompile(`^[a-zA-Z]{3}$`)
+	// A bare lowercase ASCII hostname, the form the API normalizes allowed domains to.
+	hostnameRegexp = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	currencyRegexp = regexp.MustCompile(`^[a-zA-Z]{3}$`)
 )
 
 var (
@@ -186,6 +189,10 @@ type formResourceModel struct {
 	EnableLanguageDetection types.Bool          `tfsdk:"enable_language_detection"`
 	ExpectedLanguages       types.List          `tfsdk:"expected_languages"`
 	LanguageDetectionFields types.List          `tfsdk:"language_detection_fields"`
+	EnableAllowedDomains    types.Bool          `tfsdk:"enable_allowed_domains"`
+	AllowedDomains          types.List          `tfsdk:"allowed_domains"`
+	EnableAiSpamReview      types.Bool          `tfsdk:"enable_ai_spam_review"`
+	AiSpamReviewExcluded    types.List          `tfsdk:"ai_spam_review_excluded_fields"`
 	Tags                    types.Set           `tfsdk:"tags"`
 	Fields                  []fieldModel        `tfsdk:"field"`
 	SubmitActions           []submitActionModel `tfsdk:"submit_action"`
@@ -230,6 +237,14 @@ func (r *formResource) ValidateConfig(ctx context.Context, req resource.Validate
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	if m.EnableAllowedDomains.ValueBool() && !m.AllowedDomains.IsUnknown() && len(m.AllowedDomains.Elements()) == 0 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allowed_domains"),
+			"Allowed domains required",
+			"Add at least one domain to `allowed_domains` when `enable_allowed_domains` is true.",
+		)
 	}
 
 	// A payment form sends the submitter to Stripe Checkout, which only returns them via an HTTP
@@ -324,6 +339,30 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				ElementType:         types.StringType,
 				MarkdownDescription: "Field names to run language detection against. Empty means all text fields.",
 			},
+			"enable_allowed_domains": schema.BoolAttribute{
+				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+				MarkdownDescription: "Only accept submissions whose `Origin` header (or `Referer`, when there is no `Origin`) matches one of `allowed_domains`. Requires at least one domain. Server-side forms skip this check.",
+			},
+			"allowed_domains": schema.ListAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Validators: []validator.List{
+					listvalidator.SizeAtMost(50),
+					listvalidator.UniqueValues(),
+					listvalidator.ValueStringsAre(stringvalidator.RegexMatches(hostnameRegexp, "must be a bare lowercase hostname such as `example.com`, without scheme, path, port or `*.` prefix (use punycode for internationalized domains)")),
+				},
+				MarkdownDescription: "Up to 50 hostnames the form may be submitted from, used when `enable_allowed_domains` is on. A domain also covers its subdomains, so `example.com` allows `www.example.com`. Use the bare lowercase hostname (no scheme, path, port or `*.` prefix; punycode for internationalized domains).",
+			},
+			"enable_ai_spam_review": schema.BoolAttribute{
+				Optional: true, Computed: true,
+				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Send submissions the rule-based spam checks are unsure about to an AI model for a second opinion. When not set, the current server value is kept: new forms are created with it enabled, forms that existed before the setting was introduced have it disabled. Set it explicitly to manage it.",
+			},
+			"ai_spam_review_excluded_fields": schema.ListAttribute{
+				Optional:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "Field names whose values are never sent to the AI spam reviewer, for example fields holding sensitive personal data. Matched case-insensitively. Empty or unset means all fields may be sent.",
+			},
 			"tags": schema.SetAttribute{
 				Optional:            true,
 				ElementType:         types.StringType,
@@ -341,7 +380,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"rule":              schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("None"), Validators: []validator.String{stringvalidator.OneOf("None", "Email", "Number", "PositiveNumber", "NumberRange", "Website", "Before", "After", "Between", "FileExtension", "FileSize")}, MarkdownDescription: "Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys."},
 						"required":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), MarkdownDescription: "Whether the field is required."},
 						"validation_config": schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes)."},
-						"options":           schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `[\"Small\",\"Large\"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `maxFiles` (File, max number of files per submission)."},
+						"options":           schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `[\"Small\",\"Large\"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `isNameField` (Text with rule `None`, `true` marks the field as a person's name so digits in the submitted value count toward the spam score; the dashboard's Name field template sets it); `maxFiles` (File, max number of files per submission)."},
 					},
 				},
 			},
