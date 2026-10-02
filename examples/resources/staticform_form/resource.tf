@@ -1,6 +1,15 @@
 resource "staticform_form" "contact" {
   name = "Contact form"
 
+  # Only accept submissions from your own site (and its subdomains).
+  enable_allowed_domains = true
+  allowed_domains        = ["example.com"]
+
+  # Ask an AI model for a second opinion on doubtful submissions, but never
+  # send it the submitter's email address.
+  enable_ai_spam_review          = true
+  ai_spam_review_excluded_fields = ["email"]
+
   field {
     name     = "email"
     type     = "Text"

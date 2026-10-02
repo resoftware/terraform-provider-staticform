@@ -24,9 +24,11 @@ func NewFormDataSource() datasource.DataSource { return &formDataSource{} }
 type formDataSource struct{ client *client.Client }
 
 type formDataSourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	SubmissionMode types.String `tfsdk:"submission_mode"`
+	ID                   types.String `tfsdk:"id"`
+	Name                 types.String `tfsdk:"name"`
+	SubmissionMode       types.String `tfsdk:"submission_mode"`
+	EnableAiSpamReview   types.Bool   `tfsdk:"enable_ai_spam_review"`
+	AiSpamReviewExcluded types.List   `tfsdk:"ai_spam_review_excluded_fields"`
 }
 
 func (d *formDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -52,6 +54,14 @@ func (d *formDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 			"id":              dschema.StringAttribute{Required: true, MarkdownDescription: "Form ID."},
 			"name":            dschema.StringAttribute{Computed: true, MarkdownDescription: "Form name."},
 			"submission_mode": dschema.StringAttribute{Computed: true, MarkdownDescription: "`ClientSide` or `ServerSide`."},
+			"enable_ai_spam_review": dschema.BoolAttribute{
+				Computed:            true,
+				MarkdownDescription: "Whether uncertain submissions are sent to an AI model for a second spam opinion. Null when the API does not report it.",
+			},
+			"ai_spam_review_excluded_fields": dschema.ListAttribute{
+				Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "Field names never sent to the AI spam reviewer. Null when the API does not report it.",
+			},
 		},
 	}
 }
@@ -69,6 +79,11 @@ func (d *formDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 	cfg.Name = types.StringValue(form.Name)
 	cfg.SubmissionMode = types.StringValue(form.SubmissionMode)
+	cfg.EnableAiSpamReview = boolFromPtr(form.EnableAiSpamReview)
+	cfg.AiSpamReviewExcluded = types.ListNull(types.StringType)
+	if form.AiSpamReviewExcludedFields != nil {
+		cfg.AiSpamReviewExcluded = toStringList(*form.AiSpamReviewExcludedFields)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &cfg)...)
 }
 

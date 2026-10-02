@@ -207,41 +207,53 @@ type PaymentSettings struct {
 	CustomerEmailFieldName *string `json:"customerEmailFieldName,omitempty"`
 }
 
-// FormRequest is the create/update body for a form.
+// FormRequest is the create/update body for a form. On update the API leaves
+// omitted settings unchanged, so the list pointers (AllowedDomains,
+// AiSpamReviewExcludedFields) are set to an empty slice to clear a list.
 type FormRequest struct {
-	Name                    string            `json:"name"`
-	Fields                  []Field           `json:"fields"`
-	SubmitActions           []SubmitAction    `json:"submitActions"`
-	CaptchaType             *string           `json:"captchaType,omitempty"`
-	CaptchaSecretKey        *string           `json:"captchaSecretKey,omitempty"`
-	EnableHoneypot          *bool             `json:"enableHoneypot,omitempty"`
-	HoneypotFieldName       *string           `json:"honeypotFieldName,omitempty"`
-	EnableLanguageDetection *bool             `json:"enableLanguageDetection,omitempty"`
-	ExpectedLanguages       []string          `json:"expectedLanguages,omitempty"`
-	LanguageDetectionFields []string          `json:"languageDetectionFields,omitempty"`
-	RedirectSettings        *RedirectSettings `json:"redirectSettings,omitempty"`
-	PaymentSettings         *PaymentSettings  `json:"paymentSettings,omitempty"`
-	SubmissionMode          *string           `json:"submissionMode,omitempty"`
+	Name                       string            `json:"name"`
+	Fields                     []Field           `json:"fields"`
+	SubmitActions              []SubmitAction    `json:"submitActions"`
+	CaptchaType                *string           `json:"captchaType,omitempty"`
+	CaptchaSecretKey           *string           `json:"captchaSecretKey,omitempty"`
+	EnableHoneypot             *bool             `json:"enableHoneypot,omitempty"`
+	HoneypotFieldName          *string           `json:"honeypotFieldName,omitempty"`
+	EnableLanguageDetection    *bool             `json:"enableLanguageDetection,omitempty"`
+	ExpectedLanguages          []string          `json:"expectedLanguages,omitempty"`
+	LanguageDetectionFields    []string          `json:"languageDetectionFields,omitempty"`
+	EnableAllowedDomains       *bool             `json:"enableAllowedDomains,omitempty"`
+	AllowedDomains             *[]string         `json:"allowedDomains,omitempty"`
+	EnableAiSpamReview         *bool             `json:"enableAiSpamReview,omitempty"`
+	AiSpamReviewExcludedFields *[]string         `json:"aiSpamReviewExcludedFields,omitempty"`
+	RedirectSettings           *RedirectSettings `json:"redirectSettings,omitempty"`
+	PaymentSettings            *PaymentSettings  `json:"paymentSettings,omitempty"`
+	SubmissionMode             *string           `json:"submissionMode,omitempty"`
 }
 
 // Form is the API's representation of a form, as returned by create/get/update.
+// The allowed-domain and AI spam review settings are pointers because API
+// versions that predate them omit them: nil means "not returned", not "empty".
 type Form struct {
-	ID                      string            `json:"id"`
-	Name                    string            `json:"name"`
-	Fields                  []Field           `json:"fields"`
-	SubmitActions           []SubmitAction    `json:"submitActions"`
-	CaptchaType             string            `json:"captchaType"`
-	CaptchaSecretKey        *string           `json:"captchaSecretKey"`
-	EnableHoneypot          bool              `json:"enableHoneypot"`
-	HoneypotFieldName       string            `json:"honeypotFieldName"`
-	EnableLanguageDetection bool              `json:"enableLanguageDetection"`
-	ExpectedLanguages       []string          `json:"expectedLanguages"`
-	LanguageDetectionFields []string          `json:"languageDetectionFields"`
-	RedirectSettings        *RedirectSettings `json:"redirectSettings"`
-	PaymentSettings         *PaymentSettings  `json:"paymentSettings"`
-	SubmissionMode          string            `json:"submissionMode"`
-	ServerSubmissionSecret  *string           `json:"serverSubmissionSecret"`
-	Tags                    []string          `json:"tags"`
+	ID                         string            `json:"id"`
+	Name                       string            `json:"name"`
+	Fields                     []Field           `json:"fields"`
+	SubmitActions              []SubmitAction    `json:"submitActions"`
+	CaptchaType                string            `json:"captchaType"`
+	CaptchaSecretKey           *string           `json:"captchaSecretKey"`
+	EnableHoneypot             bool              `json:"enableHoneypot"`
+	HoneypotFieldName          string            `json:"honeypotFieldName"`
+	EnableLanguageDetection    bool              `json:"enableLanguageDetection"`
+	ExpectedLanguages          []string          `json:"expectedLanguages"`
+	LanguageDetectionFields    []string          `json:"languageDetectionFields"`
+	EnableAllowedDomains       *bool             `json:"enableAllowedDomains"`
+	AllowedDomains             *[]string         `json:"allowedDomains"`
+	EnableAiSpamReview         *bool             `json:"enableAiSpamReview"`
+	AiSpamReviewExcludedFields *[]string         `json:"aiSpamReviewExcludedFields"`
+	RedirectSettings           *RedirectSettings `json:"redirectSettings"`
+	PaymentSettings            *PaymentSettings  `json:"paymentSettings"`
+	SubmissionMode             string            `json:"submissionMode"`
+	ServerSubmissionSecret     *string           `json:"serverSubmissionSecret"`
+	Tags                       []string          `json:"tags"`
 }
 
 // CreateForm creates a form. The response includes submit actions with their
