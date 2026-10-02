@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/resoftware/terraform-provider-staticform/internal/client"
 )
@@ -25,7 +26,7 @@ type fakeFormAPI struct {
 	nextID int
 }
 
-func newFakeFormAPI(t *testing.T, legacy bool) *httptest.Server {
+func newFakeFormAPI(t *testing.T, legacy bool) (*httptest.Server, *fakeFormAPI) {
 	api := &fakeFormAPI{legacy: legacy, forms: map[string]*client.Form{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/forms", api.create)
@@ -35,7 +36,7 @@ func newFakeFormAPI(t *testing.T, legacy bool) *httptest.Server {
 	mux.HandleFunc("PATCH /api/v1/forms/{id}/tags", api.tags)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, api
 }
 
 func orEmpty(in []string) []string {
@@ -84,6 +85,7 @@ func (a *fakeFormAPI) create(w http.ResponseWriter, r *http.Request) {
 		Tags:                    []string{},
 	}
 	f.SubmitActions = a.assignActionIDs(req.SubmitActions)
+	f.RedirectSettings, f.PaymentSettings = req.RedirectSettings, req.PaymentSettings
 	if req.EnableHoneypot != nil {
 		f.EnableHoneypot = *req.EnableHoneypot
 	}
@@ -142,6 +144,7 @@ func (a *fakeFormAPI) update(w http.ResponseWriter, r *http.Request) {
 	f.Name = req.Name
 	f.Fields = req.Fields
 	f.SubmitActions = a.assignActionIDs(req.SubmitActions)
+	f.RedirectSettings, f.PaymentSettings = req.RedirectSettings, req.PaymentSettings
 	if !a.legacy {
 		if req.EnableAllowedDomains != nil {
 			v := *req.EnableAllowedDomains
@@ -235,6 +238,55 @@ const fakeAPISettings = `
   ai_spam_review_excluded_fields = ["email"]
 `
 
+const fakeAPIEmptyStrings = `
+  submit_action {
+    type          = "SendEmailAction"
+    name          = "notify"
+    recipient     = "team@example.com"
+    subject       = ""
+    reply_to      = ""
+    body_template = "{{form.email}}"
+
+    email_template {
+      header_text = ""
+      footer_text = "Thanks"
+    }
+
+    run_condition {
+      condition {
+        field_name = "email"
+        operator   = "NotEmpty"
+        value      = ""
+      }
+    }
+  }
+
+  redirect {
+    success {
+      type       = "CustomUrl"
+      custom_url = "https://example.com/thanks"
+      message    = ""
+    }
+    error {
+      type       = "InternalPage"
+      custom_url = ""
+      message    = "Payment failed"
+    }
+  }
+
+  payment {
+    connection_id             = "conn-1"
+    currency                  = "eur"
+    mode                      = "Fixed"
+    customer_email_field_name = ""
+
+    fixed_rule {
+      amount_cents = 1000
+      description  = ""
+    }
+  }
+`
+
 // TestFormResourceFakeAPI runs plan/apply/refresh cycles for the allowed-domain
 // and AI spam review settings against an in-process fake API, both one that
 // supports them and a legacy one that omits them. It needs no credentials, but
@@ -244,7 +296,7 @@ func TestFormResourceFakeAPI(t *testing.T) {
 	const ds = "data.staticform_form.test"
 
 	t.Run("current", func(t *testing.T) {
-		srv := newFakeFormAPI(t, false)
+		srv, _ := newFakeFormAPI(t, false)
 		resource.Test(t, resource.TestCase{
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
@@ -315,8 +367,85 @@ func TestFormResourceFakeAPI(t *testing.T) {
 		})
 	})
 
+	t.Run("empty strings", func(t *testing.T) {
+		srv, api := newFakeFormAPI(t, false)
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					// The provider sends "" as null and the API echoes null; the
+					// configured "" must survive apply and refresh without a diff.
+					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStrings),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr(res, "submit_action.0.subject", ""),
+						resource.TestCheckResourceAttr(res, "submit_action.0.reply_to", ""),
+						resource.TestCheckResourceAttr(res, "submit_action.0.email_template.0.header_text", ""),
+						resource.TestCheckResourceAttr(res, "submit_action.0.run_condition.0.condition.0.value", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.success.0.message", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.error.0.custom_url", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.customer_email_field_name", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.fixed_rule.0.description", ""),
+					),
+				},
+				{
+					// A form saved from the dashboard can store "" instead of null.
+					// Import must read those back as null, so generated config does
+					// not contain `subject = ""`.
+					PreConfig: func() {
+						api.mu.Lock()
+						defer api.mu.Unlock()
+						empty := ""
+						for _, f := range api.forms {
+							for i := range f.SubmitActions {
+								f.SubmitActions[i].Subject = &empty
+								f.SubmitActions[i].ReplyTo = &empty
+								f.SubmitActions[i].CustomEmailTemplate.HeaderText = &empty
+							}
+							f.RedirectSettings.Success.Message = &empty
+							f.RedirectSettings.Error.CustomURL = &empty
+							f.PaymentSettings.CustomerEmailFieldName = &empty
+							f.PaymentSettings.FixedRules[0].Description = &empty
+						}
+					},
+					ResourceName: res,
+					ImportState:  true,
+					ImportStateCheck: func(states []*terraform.InstanceState) error {
+						if len(states) != 1 {
+							return fmt.Errorf("expected 1 imported state, got %d", len(states))
+						}
+						for _, k := range []string{
+							"submit_action.0.subject",
+							"submit_action.0.reply_to",
+							"submit_action.0.email_template.0.header_text",
+							"submit_action.0.run_condition.0.condition.0.value",
+							"redirect.0.success.0.message",
+							"redirect.0.error.0.custom_url",
+							"payment.0.customer_email_field_name",
+							"payment.0.fixed_rule.0.description",
+						} {
+							if v, ok := states[0].Attributes[k]; ok {
+								return fmt.Errorf("%s: imported as %q, want null", k, v)
+							}
+						}
+						return nil
+					},
+				},
+				{
+					// Refreshing an API "" against a configured "" keeps the config value.
+					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStrings),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr(res, "submit_action.0.subject", ""),
+						resource.TestCheckResourceAttr(res, "submit_action.0.reply_to", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.success.0.message", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.fixed_rule.0.description", ""),
+					),
+				},
+			},
+		})
+	})
+
 	t.Run("legacy", func(t *testing.T) {
-		srv := newFakeFormAPI(t, true)
+		srv, _ := newFakeFormAPI(t, true)
 		resource.Test(t, resource.TestCase{
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
