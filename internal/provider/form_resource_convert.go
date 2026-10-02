@@ -366,14 +366,22 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 		m.SubmitActions = append(m.SubmitActions, am)
 	}
 
+	priorRedirect := m.Redirect
 	if f.RedirectSettings != nil && (f.RedirectSettings.Success != nil || f.RedirectSettings.Error != nil) {
 		m.Redirect = []redirectModel{redirectToModel(f.RedirectSettings)}
+		if len(priorRedirect) > 0 {
+			keepEmptyRedirectStrings(&m.Redirect[0], priorRedirect[0])
+		}
 	} else {
 		m.Redirect = nil
 	}
 
+	priorPayment := m.Payment
 	if f.PaymentSettings != nil && f.PaymentSettings.Enabled {
 		m.Payment = []paymentModel{paymentToModel(f.PaymentSettings)}
+		if len(priorPayment) > 0 {
+			keepEmptyPaymentStrings(&m.Payment[0], priorPayment[0])
+		}
 	} else {
 		m.Payment = nil
 	}
@@ -421,18 +429,18 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 		ConnectionID:           strFromPtr(p.ConnectionID),
 		Currency:               types.StringValue(p.Currency),
 		Mode:                   types.StringValue(p.Mode),
-		CustomerEmailFieldName: strFromPtr(p.CustomerEmailFieldName),
+		CustomerEmailFieldName: nullIfEmptyPtr(p.CustomerEmailFieldName),
 	}
 	for _, r := range p.FixedRules {
 		m.FixedRule = append(m.FixedRule, fixedRuleModel{
 			AmountCents: types.Int64Value(r.AmountCents),
-			Description: strFromPtr(r.Description),
+			Description: nullIfEmptyPtr(r.Description),
 		})
 	}
 	for _, r := range p.FieldAmountRules {
 		m.FieldAmountRule = append(m.FieldAmountRule, fieldAmountRuleModel{
 			AmountFieldName: types.StringValue(r.AmountFieldName),
-			Description:     strFromPtr(r.Description),
+			Description:     nullIfEmptyPtr(r.Description),
 		})
 	}
 	for _, li := range p.LineItems {
@@ -444,8 +452,8 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 		m.LineItem = append(m.LineItem, lineItemModel{
 			FieldName:         types.StringValue(li.FieldName),
 			PriceMap:          pm,
-			QuantityFieldName: strFromPtr(li.QuantityFieldName),
-			Description:       strFromPtr(li.Description),
+			QuantityFieldName: nullIfEmptyPtr(li.QuantityFieldName),
+			Description:       nullIfEmptyPtr(li.Description),
 		})
 	}
 	return m
@@ -702,8 +710,8 @@ func redirectToModel(rs *client.RedirectSettings) redirectModel {
 func redirectBranchToModel(b *client.RedirectConfig) redirectBranchModel {
 	return redirectBranchModel{
 		Type:      types.StringValue(b.Type),
-		CustomURL: strFromPtr(b.CustomURL),
-		Message:   strFromPtr(b.Message),
+		CustomURL: nullIfEmptyPtr(b.CustomURL),
+		Message:   nullIfEmptyPtr(b.Message),
 	}
 }
 
@@ -817,6 +825,42 @@ func keepEmptyTemplateStrings(m *emailTemplateModel, prior emailTemplateModel) {
 		{&m.SentByText, prior.SentByText},
 	} {
 		keepEmptyPrior(p.got, p.prior)
+	}
+}
+
+// keepEmptyRedirectStrings applies keepEmptyPrior to the success and error
+// branches of a redirect block.
+func keepEmptyRedirectStrings(m *redirectModel, prior redirectModel) {
+	for _, b := range []struct{ got, prior []redirectBranchModel }{
+		{m.Success, prior.Success},
+		{m.Error, prior.Error},
+	} {
+		if len(b.got) > 0 && len(b.prior) > 0 {
+			keepEmptyPrior(&b.got[0].CustomURL, b.prior[0].CustomURL)
+			keepEmptyPrior(&b.got[0].Message, b.prior[0].Message)
+		}
+	}
+}
+
+// keepEmptyPaymentStrings applies keepEmptyPrior to the optional strings of a
+// payment block, matching its rule and line-item blocks by position.
+func keepEmptyPaymentStrings(m *paymentModel, prior paymentModel) {
+	keepEmptyPrior(&m.CustomerEmailFieldName, prior.CustomerEmailFieldName)
+	if len(m.FixedRule) == len(prior.FixedRule) {
+		for i := range m.FixedRule {
+			keepEmptyPrior(&m.FixedRule[i].Description, prior.FixedRule[i].Description)
+		}
+	}
+	if len(m.FieldAmountRule) == len(prior.FieldAmountRule) {
+		for i := range m.FieldAmountRule {
+			keepEmptyPrior(&m.FieldAmountRule[i].Description, prior.FieldAmountRule[i].Description)
+		}
+	}
+	if len(m.LineItem) == len(prior.LineItem) {
+		for i := range m.LineItem {
+			keepEmptyPrior(&m.LineItem[i].QuantityFieldName, prior.LineItem[i].QuantityFieldName)
+			keepEmptyPrior(&m.LineItem[i].Description, prior.LineItem[i].Description)
+		}
 	}
 }
 

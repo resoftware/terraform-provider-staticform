@@ -249,3 +249,90 @@ func TestOrderSubmitActionsPriorIndex(t *testing.T) {
 		}
 	}
 }
+
+// TestApplyKeepsEmptyRedirectAndPaymentStrings covers the redirect and payment
+// blocks, where the provider also sends "" as null.
+func TestApplyKeepsEmptyRedirectAndPaymentStrings(t *testing.T) {
+	empty := types.StringValue("")
+	null := types.StringNull()
+	plan := formResourceModel{
+		Redirect: []redirectModel{{
+			Success: []redirectBranchModel{{Type: types.StringValue("CustomUrl"), CustomURL: types.StringValue("https://example.com"), Message: empty}},
+			Error:   []redirectBranchModel{{Type: types.StringValue("InternalPage"), CustomURL: empty, Message: null}},
+		}},
+		Payment: []paymentModel{{
+			ConnectionID:           types.StringValue("conn-1"),
+			Currency:               types.StringValue("eur"),
+			Mode:                   types.StringValue("LineItems"),
+			CustomerEmailFieldName: empty,
+			FixedRule:              []fixedRuleModel{{AmountCents: types.Int64Value(100), Description: empty}},
+			FieldAmountRule:        []fieldAmountRuleModel{{AmountFieldName: types.StringValue("amount"), Description: empty}},
+			LineItem:               []lineItemModel{{FieldName: types.StringValue("size"), QuantityFieldName: empty, Description: types.StringValue("old")}},
+		}},
+	}
+	url, conn, blank := "https://example.com", "conn-1", ""
+	resp := &client.Form{
+		ID:   "form-1",
+		Name: "form",
+		RedirectSettings: &client.RedirectSettings{
+			Success: &client.RedirectConfig{Type: "CustomUrl", CustomURL: &url},
+			Error:   &client.RedirectConfig{Type: "InternalPage", Message: &blank},
+		},
+		PaymentSettings: &client.PaymentSettings{
+			Enabled:          true,
+			ConnectionID:     &conn,
+			Currency:         "eur",
+			Mode:             "LineItems",
+			FixedRules:       []client.FixedPaymentRule{{AmountCents: 100}},
+			FieldAmountRules: []client.FieldAmountPaymentRule{{AmountFieldName: "amount", Description: &blank}},
+			LineItems:        []client.PaymentLineItem{{FieldName: "size", PriceMap: map[string]int64{"S": 100}}},
+		},
+	}
+
+	if d := (&formResource{}).apply(context.Background(), resp, &plan); d.HasError() {
+		t.Fatalf("apply: %v", d)
+	}
+	rd, pm := plan.Redirect[0], plan.Payment[0]
+	checks := []struct {
+		name      string
+		got, want types.String
+	}{
+		{"redirect.success.message", rd.Success[0].Message, empty},
+		{"redirect.error.custom_url", rd.Error[0].CustomURL, empty},
+		{"redirect.error.message", rd.Error[0].Message, null},
+		{"payment.customer_email_field_name", pm.CustomerEmailFieldName, empty},
+		{"payment.fixed_rule.description", pm.FixedRule[0].Description, empty},
+		{"payment.field_amount_rule.description", pm.FieldAmountRule[0].Description, empty},
+		{"payment.line_item.quantity_field_name", pm.LineItem[0].QuantityFieldName, empty},
+		{"payment.line_item.description", pm.LineItem[0].Description, null},
+	}
+	for _, c := range checks {
+		if !c.got.Equal(c.want) {
+			t.Errorf("%s: got %s, want %s", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestRedirectAndPaymentToModelNormalizeEmptyStrings(t *testing.T) {
+	empty := ""
+	rd := redirectBranchToModel(&client.RedirectConfig{Type: "InternalPage", CustomURL: &empty, Message: &empty})
+	pm := paymentToModel(&client.PaymentSettings{
+		CustomerEmailFieldName: &empty,
+		FixedRules:             []client.FixedPaymentRule{{Description: &empty}},
+		FieldAmountRules:       []client.FieldAmountPaymentRule{{Description: &empty}},
+		LineItems:              []client.PaymentLineItem{{QuantityFieldName: &empty, Description: &empty}},
+	})
+	for name, v := range map[string]types.String{
+		"redirect.custom_url":                   rd.CustomURL,
+		"redirect.message":                      rd.Message,
+		"payment.customer_email_field_name":     pm.CustomerEmailFieldName,
+		"payment.fixed_rule.description":        pm.FixedRule[0].Description,
+		"payment.field_amount_rule.description": pm.FieldAmountRule[0].Description,
+		"payment.line_item.quantity_field_name": pm.LineItem[0].QuantityFieldName,
+		"payment.line_item.description":         pm.LineItem[0].Description,
+	} {
+		if !v.IsNull() {
+			t.Errorf("%s: got %s, want null", name, v)
+		}
+	}
+}

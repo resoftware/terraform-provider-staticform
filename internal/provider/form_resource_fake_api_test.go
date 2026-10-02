@@ -85,6 +85,7 @@ func (a *fakeFormAPI) create(w http.ResponseWriter, r *http.Request) {
 		Tags:                    []string{},
 	}
 	f.SubmitActions = a.assignActionIDs(req.SubmitActions)
+	f.RedirectSettings, f.PaymentSettings = req.RedirectSettings, req.PaymentSettings
 	if req.EnableHoneypot != nil {
 		f.EnableHoneypot = *req.EnableHoneypot
 	}
@@ -143,6 +144,7 @@ func (a *fakeFormAPI) update(w http.ResponseWriter, r *http.Request) {
 	f.Name = req.Name
 	f.Fields = req.Fields
 	f.SubmitActions = a.assignActionIDs(req.SubmitActions)
+	f.RedirectSettings, f.PaymentSettings = req.RedirectSettings, req.PaymentSettings
 	if !a.legacy {
 		if req.EnableAllowedDomains != nil {
 			v := *req.EnableAllowedDomains
@@ -236,7 +238,7 @@ const fakeAPISettings = `
   ai_spam_review_excluded_fields = ["email"]
 `
 
-const fakeAPIEmptyStringAction = `
+const fakeAPIEmptyStrings = `
   submit_action {
     type          = "SendEmailAction"
     name          = "notify"
@@ -256,6 +258,31 @@ const fakeAPIEmptyStringAction = `
         operator   = "NotEmpty"
         value      = ""
       }
+    }
+  }
+
+  redirect {
+    success {
+      type       = "CustomUrl"
+      custom_url = "https://example.com/thanks"
+      message    = ""
+    }
+    error {
+      type       = "InternalPage"
+      custom_url = ""
+      message    = "Payment failed"
+    }
+  }
+
+  payment {
+    connection_id             = "conn-1"
+    currency                  = "eur"
+    mode                      = "Fixed"
+    customer_email_field_name = ""
+
+    fixed_rule {
+      amount_cents = 1000
+      description  = ""
     }
   }
 `
@@ -348,12 +375,16 @@ func TestFormResourceFakeAPI(t *testing.T) {
 				{
 					// The provider sends "" as null and the API echoes null; the
 					// configured "" must survive apply and refresh without a diff.
-					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStringAction),
+					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStrings),
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttr(res, "submit_action.0.subject", ""),
 						resource.TestCheckResourceAttr(res, "submit_action.0.reply_to", ""),
 						resource.TestCheckResourceAttr(res, "submit_action.0.email_template.0.header_text", ""),
 						resource.TestCheckResourceAttr(res, "submit_action.0.run_condition.0.condition.0.value", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.success.0.message", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.error.0.custom_url", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.customer_email_field_name", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.fixed_rule.0.description", ""),
 					),
 				},
 				{
@@ -370,6 +401,10 @@ func TestFormResourceFakeAPI(t *testing.T) {
 								f.SubmitActions[i].ReplyTo = &empty
 								f.SubmitActions[i].CustomEmailTemplate.HeaderText = &empty
 							}
+							f.RedirectSettings.Success.Message = &empty
+							f.RedirectSettings.Error.CustomURL = &empty
+							f.PaymentSettings.CustomerEmailFieldName = &empty
+							f.PaymentSettings.FixedRules[0].Description = &empty
 						}
 					},
 					ResourceName: res,
@@ -383,6 +418,10 @@ func TestFormResourceFakeAPI(t *testing.T) {
 							"submit_action.0.reply_to",
 							"submit_action.0.email_template.0.header_text",
 							"submit_action.0.run_condition.0.condition.0.value",
+							"redirect.0.success.0.message",
+							"redirect.0.error.0.custom_url",
+							"payment.0.customer_email_field_name",
+							"payment.0.fixed_rule.0.description",
 						} {
 							if v, ok := states[0].Attributes[k]; ok {
 								return fmt.Errorf("%s: imported as %q, want null", k, v)
@@ -393,10 +432,12 @@ func TestFormResourceFakeAPI(t *testing.T) {
 				},
 				{
 					// Refreshing an API "" against a configured "" keeps the config value.
-					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStringAction),
+					Config: fakeAPIFormConfig(srv.URL, fakeAPIEmptyStrings),
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttr(res, "submit_action.0.subject", ""),
 						resource.TestCheckResourceAttr(res, "submit_action.0.reply_to", ""),
+						resource.TestCheckResourceAttr(res, "redirect.0.success.0.message", ""),
+						resource.TestCheckResourceAttr(res, "payment.0.fixed_rule.0.description", ""),
 					),
 				},
 			},
