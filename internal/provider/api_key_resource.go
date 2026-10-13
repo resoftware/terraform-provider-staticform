@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -75,7 +76,8 @@ func (r *apiKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "Permission names to scope the key to. Omit for all of the creating user's permissions. Updatable in place.",
+				Validators:          []validator.Set{setvalidator.SizeAtLeast(1)},
+				MarkdownDescription: "Native User.* permission names to scope the key to. Historical product names are translated for existing configurations. Omit to inherit the owner's delegable permissions. Explicit empty sets are rejected to avoid converting legacy deny-all configuration into owner-wide access. Updatable in place.",
 				PlanModifiers:       []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 			},
 			"form_ids": schema.SetAttribute{
@@ -122,7 +124,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	key, err := r.client.CreateAPIKey(ctx, body)
-	if err != nil {
+	if key == nil {
 		resp.Diagnostics.AddError("Error creating API key", err.Error())
 		return
 	}
@@ -131,11 +133,17 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	plan.Key = types.StringValue(key.APIKey)
 	plan.KeyHint = types.StringValue(key.KeyHint)
 	plan.CreatedAt = types.StringValue(key.CreatedAtUTC)
+	if key.CreatedAtUTC == "" {
+		plan.CreatedAt = types.StringNull()
+	}
 	plan.ExpiresAt = normalizeExpiry(plan.ExpiresAt, key.ExpiresAtUTC)
-	plan.Permissions = toStringSet(key.Permissions)
+	plan.Permissions = toStringSet(client.PreserveAPIKeyPermissionNames(perms, key.Permissions))
 	plan.FormIDs = toStringSet(key.FormIDs)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if err != nil {
+		resp.Diagnostics.AddError("API key created but metadata refresh failed", err.Error())
+	}
 }
 
 func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -159,7 +167,9 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	state.KeyHint = types.StringValue(key.KeyHint)
 	state.CreatedAt = types.StringValue(key.CreatedAtUTC)
 	state.ExpiresAt = normalizeExpiry(state.ExpiresAt, key.ExpiresAtUTC)
-	state.Permissions = toStringSet(key.Permissions)
+	previous, d := stringSet(ctx, state.Permissions)
+	resp.Diagnostics.Append(d...)
+	state.Permissions = toStringSet(client.PreserveAPIKeyPermissionNames(previous, key.Permissions))
 	state.FormIDs = toStringSet(key.FormIDs)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

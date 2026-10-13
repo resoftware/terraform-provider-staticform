@@ -49,6 +49,23 @@ the `api_key` provider argument or the `STATICFORM_API_KEY` environment variable
 Use an `sf_test_` key against a test environment by also setting `base_url`
 (or `STATICFORM_BASE_URL`).
 
+API-key management uses the native `/identity/v1/api-keys` API. The bootstrap key needs the native
+list/create/update/delete permissions for the operations you use, plus `User.Account.GetPermissions`
+for permission discovery. Creation also requires the account's password or a fresh, account-bound
+reauthentication proof. Set optional sensitive `key_creation_password` / `key_creation_reauth_token`,
+or `STATICFORM_KEY_CREATION_PASSWORD` / `STATICFORM_KEY_CREATION_REAUTH_TOKEN`. Only key creation
+sends these values. Accounts requiring another factor need a fresh reauthentication proof; expired
+or consumed proofs must be renewed. Other resources, key reads, updates and deletion need no
+creation proof, so existing form-only automation is unaffected.
+
+Existing key resource IDs and saved plaintext survive refresh/import. Imports cannot recover a key's
+plaintext. Native paginated listing is followed across every page. New permissions use `User.*` names;
+historical StaticForm names are translated, retaining their Terraform representation while the
+effective scope matches. Omitted permissions inherit the owner's delegable permissions. Explicit
+empty permission sets are rejected because legacy updates meant deny-all while native empty scopes
+mean inheritance; revoke the resource to remove access. If creation succeeds but metadata retrieval
+fails, the returned ID and plaintext remain in state for recovery.
+
 ## Resources & data sources
 
 | Type | Name |
@@ -104,10 +121,10 @@ builds cross-platform binaries and a GPG-signed `SHA256SUMS` file. The repo need
 `GPG_PRIVATE_KEY` and `PASSPHRASE` secrets. The same release artifacts feed both
 registries; both verify with the same GPG public key.
 
-- **Terraform Registry** — sign in at [registry.terraform.io](https://registry.terraform.io),
+- **Terraform Registry**: sign in at [registry.terraform.io](https://registry.terraform.io),
   add the GPG public key under the `resoftware` organization, then
   **Publish → Provider**. Subsequent tagged releases are indexed automatically.
-- **OpenTofu Registry** — one-time submission to the
+- **OpenTofu Registry**: one-time submission to the
   [`opentofu/registry`](https://github.com/opentofu/registry) repo (add the
   `resoftware` namespace + GPG public key); tagged releases are indexed thereafter.
 

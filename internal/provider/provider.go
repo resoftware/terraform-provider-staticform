@@ -25,8 +25,10 @@ type StaticFormProvider struct {
 
 // StaticFormProviderModel maps provider schema config to Go types.
 type StaticFormProviderModel struct {
-	APIKey  types.String `tfsdk:"api_key"`
-	BaseURL types.String `tfsdk:"base_url"`
+	APIKey                 types.String `tfsdk:"api_key"`
+	BaseURL                types.String `tfsdk:"base_url"`
+	KeyCreationPassword    types.String `tfsdk:"key_creation_password"`
+	KeyCreationReauthToken types.String `tfsdk:"key_creation_reauth_token"`
 }
 
 // New returns a function that constructs the provider for a given version.
@@ -51,6 +53,14 @@ func (p *StaticFormProvider) Schema(_ context.Context, _ provider.SchemaRequest,
 					"Create one under Settings → API Keys in the dashboard.",
 				Optional:  true,
 				Sensitive: true,
+			},
+			"key_creation_password": schema.StringAttribute{
+				Optional: true, Sensitive: true,
+				MarkdownDescription: "Account password for native API-key creation step-up. May also be set with STATICFORM_KEY_CREATION_PASSWORD. Only sent when creating a key. Accounts requiring another factor must provide a fresh reauthentication proof instead.",
+			},
+			"key_creation_reauth_token": schema.StringAttribute{
+				Optional: true, Sensitive: true,
+				MarkdownDescription: "Fresh native reauthentication proof for API-key creation. May also be set with STATICFORM_KEY_CREATION_REAUTH_TOKEN. Short-lived and bound to the creating account; obtain another proof when expired or consumed.",
 			},
 			"base_url": schema.StringAttribute{
 				MarkdownDescription: "Base URL of the StaticForm API. Defaults to `https://api.staticform.app`. " +
@@ -86,7 +96,15 @@ func (p *StaticFormProvider) Configure(ctx context.Context, req provider.Configu
 		baseURL = cfg.BaseURL.ValueString()
 	}
 
-	c := client.New(baseURL, apiKey, client.WithUserAgent("terraform-provider-staticform/"+p.version))
+	password := os.Getenv("STATICFORM_KEY_CREATION_PASSWORD")
+	if !cfg.KeyCreationPassword.IsNull() && cfg.KeyCreationPassword.ValueString() != "" {
+		password = cfg.KeyCreationPassword.ValueString()
+	}
+	reauthToken := os.Getenv("STATICFORM_KEY_CREATION_REAUTH_TOKEN")
+	if !cfg.KeyCreationReauthToken.IsNull() && cfg.KeyCreationReauthToken.ValueString() != "" {
+		reauthToken = cfg.KeyCreationReauthToken.ValueString()
+	}
+	c := client.New(baseURL, apiKey, client.WithUserAgent("terraform-provider-staticform/"+p.version), client.WithKeyCreationProof(password, reauthToken))
 	resp.DataSourceData = c
 	resp.ResourceData = c
 }

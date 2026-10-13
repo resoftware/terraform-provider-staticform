@@ -16,7 +16,7 @@ A StaticForm API key. The plaintext key is returned only at creation time and st
 resource "staticform_api_key" "ci" {
   name        = "ci-pipeline"
   expires_at  = "2027-01-01T00:00:00Z"
-  permissions = ["Form.GetById", "Submission.ListAll"]
+  permissions = ["User.Forms.GetById", "User.Submissions.ListAll"]
 }
 
 output "api_key" {
@@ -36,7 +36,7 @@ output "api_key" {
 
 - `expires_at` (String) Optional RFC 3339 expiration timestamp (e.g. `2027-01-01T00:00:00Z`). Omit for a non-expiring key. Immutable; changing it forces a new key.
 - `form_ids` (Set of String) Form IDs to scope the key to. Omit for all of the user's forms. Updatable in place.
-- `permissions` (Set of String) Permission names to scope the key to. Omit for all of the creating user's permissions. Updatable in place.
+- `permissions` (Set of String) Native User.* permission names to scope the key to. Historical product names are translated for existing configurations. Omit to inherit the owner's delegable permissions. Explicit empty sets are rejected to avoid converting legacy deny-all configuration into owner-wide access. Updatable in place.
 
 ### Read-Only
 

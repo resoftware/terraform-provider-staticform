@@ -20,10 +20,12 @@ const DefaultBaseURL = "https://api.staticform.app"
 
 // Client talks to the StaticForm API using an X-API-Key credential.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
-	userAgent  string
+	baseURL        string
+	apiKey         string
+	httpClient     *http.Client
+	userAgent      string
+	keyPassword    string
+	keyReauthToken string
 }
 
 // Option configures a Client.
@@ -37,6 +39,10 @@ func WithHTTPClient(h *http.Client) Option {
 // WithUserAgent sets the User-Agent header sent on every request.
 func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
+}
+
+func WithKeyCreationProof(password, reauthToken string) Option {
+	return func(c *Client) { c.keyPassword, c.keyReauthToken = password, reauthToken }
 }
 
 // New builds a Client. baseURL may be empty to use DefaultBaseURL.

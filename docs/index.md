@@ -23,6 +23,8 @@ terraform {
 # The API key can also be supplied via the STATICFORM_API_KEY environment variable.
 provider "staticform" {
   api_key = var.staticform_api_key
+  # When managing API-key resources, supply a fresh proof via
+  # STATICFORM_KEY_CREATION_PASSWORD or STATICFORM_KEY_CREATION_REAUTH_TOKEN.
 }
 
 variable "staticform_api_key" {
@@ -38,3 +40,5 @@ variable "staticform_api_key" {
 
 - `api_key` (String, Sensitive) StaticForm API key. May also be set with the `STATICFORM_API_KEY` environment variable. Create one under Settings → API Keys in the dashboard.
 - `base_url` (String) Base URL of the StaticForm API. Defaults to `https://api.staticform.app`. May also be set with the `STATICFORM_BASE_URL` environment variable.
+- `key_creation_password` (String, Sensitive) Account password for native API-key creation step-up. May also be set with STATICFORM_KEY_CREATION_PASSWORD. Only sent when creating a key. Accounts requiring another factor must provide a fresh reauthentication proof instead.
+- `key_creation_reauth_token` (String, Sensitive) Fresh native reauthentication proof for API-key creation. May also be set with STATICFORM_KEY_CREATION_REAUTH_TOKEN. Short-lived and bound to the creating account; obtain another proof when expired or consumed.
