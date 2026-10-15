@@ -39,10 +39,10 @@ resource "staticform_form" "contact" {
   }
 
   submit_action {
-    type      = "SendEmailAction"
-    name      = "Notify team"
-    recipient = "team@example.com"
-    subject   = "New message from {{formName}}"
+    type          = "SendEmailAction"
+    name          = "Notify team"
+    recipient     = "team@example.com"
+    subject       = "New message from {{formName}}"
     body_template = <<-EOT
       From: {{form.email}}
 
