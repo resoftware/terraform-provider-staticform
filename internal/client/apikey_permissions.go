@@ -3,7 +3,7 @@ package client
 import "slices"
 
 var legacyAPIKeyPermissions = map[string][]string{
-	"User.GetMyProfile":                    {"User.Profile.Get"},
+	"User.GetMyProfile":                    {"User.Account.Get", "User.Billing.GetEntitlements"},
 	"User.GetMetrics":                      {"User.Metrics.Get"},
 	"User.GetMySettings":                   {"User.Settings.Get"},
 	"User.UpdateMySettings":                {"User.Settings.Update"},
@@ -54,31 +54,82 @@ var legacyAPIKeyPermissions = map[string][]string{
 	"Integrations.ManageStripeConnections": {"User.Integrations.ManageStripeConnections"},
 	"Payment.GetStorageUsage":              {"User.Payments.GetStorageUsage"},
 	"Payment.GetPaymentStatus":             {"User.Payments.GetPaymentStatus"},
-	"Subscription.GetTiers":                {"User.Subscriptions.GetTiers"},
-	"Subscription.GetMySubscription":       {"User.Subscriptions.GetMySubscription"},
+	"Subscription.GetTiers":                {"User.Billing.ListPlans"},
+	"Subscription.GetMySubscription":       {"User.Billing.Get"},
 	"Subscription.GetEmailUsage":           {"User.Subscriptions.GetEmailUsage"},
-	"Payment.CreateCustomerPortalSession":  {"User.Payments.CreateCustomerPortalSession"},
-	"Subscription.CreateCheckoutSession":   {"User.Subscriptions.CreateCheckoutSession"},
-	"Subscription.CancelSubscription":      {"User.Subscriptions.CancelSubscription"},
-	"Subscription.ChangeSubscription":      {"User.Subscriptions.ChangeSubscription"},
-	"Subscription.ReactivateSubscription":  {"User.Subscriptions.ReactivateSubscription"},
-	"Subscription.AutoTrial":               {"User.Subscriptions.AutoTrial"},
-	"Permissions":                          {"PermissionNotHeld"},
+	"Payment.CreateCustomerPortalSession":  {"User.Billing.OpenPortal"},
+	"Subscription.CreateCheckoutSession":   {"User.Billing.CreateCheckoutSession"},
+	"Subscription.CancelSubscription":      {"User.Billing.CancelSubscription"},
+	"Subscription.ChangeSubscription":      {"User.Billing.OpenPortal"},
+	"Subscription.ReactivateSubscription":  {"User.Billing.OpenPortal"},
+	"Subscription.AutoTrial":               {"User.Billing.StartTrial"},
 }
 
+var splitAPIKeyPermissions = map[string][]string{
+	"User.Forms.ListMy":                      {"User.Forms.ListTags"},
+	"User.Forms.GetInsights":                 {"User.Forms.ListViewRecords"},
+	"User.Forms.Delete":                      {"User.Forms.TransferOwnership"},
+	"User.Forms.Update":                      {"User.Forms.UploadEmailAttachment", "User.Forms.DeleteEmailAttachment"},
+	"User.Collaboration.ListCollaborators":   {"User.Collaboration.ListCollaboratorSuggestions"},
+	"User.Collaboration.ManageCollaborators": {"User.Collaboration.ListInvitations", "User.Collaboration.UpdateCollaborator", "User.Collaboration.RemoveCollaborator", "User.Collaboration.CancelInvitation"},
+	"User.Submissions.ListSpam":              {"User.Submissions.GetSpam"},
+	"User.Submissions.ListAll":               {"User.Submissions.GetUnreadCount"},
+	"User.Submissions.DeleteForForm":         {"User.Submissions.BatchDelete"},
+	"User.Submissions.MarkRead":              {"User.Submissions.BatchMarkRead"},
+	"User.Settings.Get":                      {"User.Notifications.GetPreferences"},
+	"User.Settings.Update":                   {"User.Notifications.UpdatePreferences"},
+	"User.Integrations.ManageGoogleConnections": {
+		"User.Integrations.ListGoogleConnections", "User.Integrations.DeleteGoogleConnection", "User.Integrations.ListGoogleConnectionUsages",
+		"User.Integrations.DisableGoogleConnectionUsage", "User.Integrations.DeleteGoogleConnectionUsage",
+		"User.Integrations.DisableAllGoogleConnectionUsages", "User.Integrations.DeleteAllGoogleConnectionUsages",
+		"User.Integrations.IssueGooglePickerToken", "User.Integrations.ListGoogleSheetTabs", "User.Integrations.TestGoogleSheetsAppend",
+	},
+	"User.Integrations.ManageNotionConnections": {
+		"User.Integrations.ListNotionConnections", "User.Integrations.DeleteNotionConnection", "User.Integrations.ListNotionConnectionUsages",
+		"User.Integrations.DisableAllNotionConnectionUsages", "User.Integrations.DeleteAllNotionConnectionUsages",
+		"User.Integrations.ListNotionDatabases", "User.Integrations.GetNotionDatabaseSchema",
+		"User.Integrations.CreateNotionDatabaseProperties", "User.Integrations.TestNotionDatabaseInsert",
+	},
+	"User.Integrations.ManageSmtpConnections": {
+		"User.Integrations.TestSmtpConnection", "User.Integrations.ListSmtpConnections", "User.Integrations.DeleteSmtpConnection",
+		"User.Integrations.ListSmtpConnectionUsages", "User.Integrations.DisableAllSmtpConnectionUsages",
+		"User.Integrations.DeleteAllSmtpConnectionUsages", "User.Integrations.SendSmtpConnectionTestEmail",
+	},
+	"User.Integrations.ManageEmailDomains": {
+		"User.Integrations.ListEmailDomains", "User.Integrations.DeleteEmailDomain", "User.Integrations.ListEmailDomainUsages",
+		"User.Integrations.DisableAllEmailDomainUsages", "User.Integrations.DeleteAllEmailDomainUsages",
+		"User.Integrations.RecheckEmailDomain", "User.Integrations.SendEmailDomainTestEmail",
+	},
+	"User.Integrations.ManageStripeConnections": {
+		"User.Integrations.ListStripeConnections", "User.Integrations.DisconnectStripeConnection", "User.Integrations.ListStripeConnectionUsages",
+		"User.Integrations.DisableAllStripeConnectionUsages", "User.Integrations.DeleteAllStripeConnectionUsages",
+		"User.Integrations.SetStripeConnectionWebhookSecret",
+	},
+}
+
+// NativeAPIKeyPermissions translates historical StaticForm permission names to
+// the per-endpoint permissions that replace them. Names that are not
+// historical are used as given.
 func NativeAPIKeyPermissions(names []string) []string {
 	if names == nil {
 		return nil
 	}
 	out := []string{}
+	add := func(permission string) {
+		if !slices.Contains(out, permission) {
+			out = append(out, permission)
+		}
+	}
 	for _, name := range names {
-		mapped, exists := legacyAPIKeyPermissions[name]
-		if !exists {
-			mapped = []string{name}
+		mapped, historical := legacyAPIKeyPermissions[name]
+		if !historical {
+			add(name)
+			continue
 		}
 		for _, permission := range mapped {
-			if !slices.Contains(out, permission) {
-				out = append(out, permission)
+			add(permission)
+			for _, split := range splitAPIKeyPermissions[permission] {
+				add(split)
 			}
 		}
 	}

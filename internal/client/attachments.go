@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"path/filepath"
-	"strings"
 )
 
 // UploadedAttachment is the result of uploading an email attachment.
@@ -52,7 +51,7 @@ func (c *Client) UploadEmailAttachment(ctx context.Context, formID, fileName str
 		return nil, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, application/problem+json")
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
@@ -64,7 +63,7 @@ func (c *Client) UploadEmailAttachment(ctx context.Context, formID, fileName str
 
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return parseUploadError(resp.StatusCode, raw)
+		return nil, parseAPIError(resp.StatusCode, raw)
 	}
 
 	var out UploadedAttachment
@@ -72,16 +71,6 @@ func (c *Client) UploadEmailAttachment(ctx context.Context, formID, fileName str
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 	return &out, nil
-}
-
-func parseUploadError(status int, raw []byte) (*UploadedAttachment, error) {
-	// The upload endpoint returns a bare string for BadRequest; fall back to the
-	// shared RFC 7807 parser for everything else.
-	if status == http.StatusBadRequest {
-		msg := strings.Trim(string(raw), `"`)
-		return nil, &APIError{StatusCode: status, Detail: msg, Raw: string(raw)}
-	}
-	return nil, parseAPIError(status, raw)
 }
 
 // DeleteEmailAttachment deletes a previously uploaded attachment by S3 key.

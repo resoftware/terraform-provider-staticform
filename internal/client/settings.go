@@ -5,14 +5,10 @@ import (
 	"net/http"
 )
 
-// UserSettings is the authenticated user's account-level notification settings.
+// UserSettings is the authenticated user's account-level settings.
 // SubmissionOverviewEmailFrequency is one of: Off, Daily, Weekly, Monthly.
 type UserSettings struct {
-	SubmitActionFailureNotificationEnabled bool   `json:"submitActionFailureNotificationEnabled"`
-	EmailOverageEnabled                    bool   `json:"emailOverageEnabled"`
-	EmailQuotaWarningEnabled               bool   `json:"emailQuotaWarningEnabled"`
-	StorageWarningEnabled                  bool   `json:"storageWarningEnabled"`
-	SubmissionOverviewEmailFrequency       string `json:"submissionOverviewEmailFrequency"`
+	SubmissionOverviewEmailFrequency string `json:"submissionOverviewEmailFrequency"`
 }
 
 // GetUserSettings fetches the current account settings.
@@ -24,7 +20,7 @@ func (c *Client) GetUserSettings(ctx context.Context) (*UserSettings, error) {
 	return &out, nil
 }
 
-// UpdateUserSettings updates the account settings (sends all fields).
+// UpdateUserSettings updates the account settings.
 func (c *Client) UpdateUserSettings(ctx context.Context, s UserSettings) (*UserSettings, error) {
 	var out UserSettings
 	if err := c.do(ctx, http.MethodPut, "/api/v1/users/me/settings", s, &out); err != nil {

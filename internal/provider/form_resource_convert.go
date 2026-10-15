@@ -12,7 +12,7 @@ import (
 )
 
 // toRequest builds a client.FormRequest from the Terraform plan model.
-func (r *formResource) toRequest(ctx context.Context, m formResourceModel) (client.FormRequest, diag.Diagnostics) {
+func (r *formResource) toRequest(ctx context.Context, m formResourceModel, extras paymentExtras) (client.FormRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	body := client.FormRequest{
@@ -58,7 +58,10 @@ func (r *formResource) toRequest(ctx context.Context, m formResourceModel) (clie
 	if len(m.Payment) > 0 {
 		ps, dp := paymentToClient(ctx, m.Payment[0])
 		diags.Append(dp...)
+		ps.PaymentRequiredCondition = requiredConditionToClient(m.Payment[0].PaymentRequiredCondition, extras.RequiredCondition)
 		body.PaymentSettings = ps
+	} else {
+		body.PaymentSettings = extras.Disabled
 	}
 
 	for _, f := range m.Fields {
@@ -381,6 +384,7 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 		m.Payment = []paymentModel{paymentToModel(f.PaymentSettings)}
 		if len(priorPayment) > 0 {
 			keepEmptyPaymentStrings(&m.Payment[0], priorPayment[0])
+			m.Payment[0].PaymentRequiredCondition = requiredConditionToModel(f.PaymentSettings.PaymentRequiredCondition, priorPayment[0].PaymentRequiredCondition)
 		}
 	} else {
 		m.Payment = nil
@@ -400,12 +404,14 @@ func paymentToClient(ctx context.Context, p paymentModel) (*client.PaymentSettin
 	}
 	for _, r := range p.FixedRule {
 		ps.FixedRules = append(ps.FixedRules, client.FixedPaymentRule{
+			Condition:   conditionFromBlocks(r.Condition),
 			AmountCents: r.AmountCents.ValueInt64(),
 			Description: strPtr(optStr(r.Description)),
 		})
 	}
 	for _, r := range p.FieldAmountRule {
 		ps.FieldAmountRules = append(ps.FieldAmountRules, client.FieldAmountPaymentRule{
+			Condition:       conditionFromBlocks(r.Condition),
 			AmountFieldName: optStr(r.AmountFieldName),
 			Description:     strPtr(optStr(r.Description)),
 		})
@@ -415,6 +421,7 @@ func paymentToClient(ctx context.Context, p paymentModel) (*client.PaymentSettin
 		d := li.PriceMap.ElementsAs(ctx, &priceMap, false)
 		diags.Append(d...)
 		ps.LineItems = append(ps.LineItems, client.PaymentLineItem{
+			Condition:         conditionFromBlocks(li.Condition),
 			FieldName:         optStr(li.FieldName),
 			PriceMap:          priceMap,
 			QuantityFieldName: strPtr(optStr(li.QuantityFieldName)),
@@ -433,12 +440,14 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 	}
 	for _, r := range p.FixedRules {
 		m.FixedRule = append(m.FixedRule, fixedRuleModel{
+			Condition:   conditionToModel(r.Condition),
 			AmountCents: types.Int64Value(r.AmountCents),
 			Description: nullIfEmptyPtr(r.Description),
 		})
 	}
 	for _, r := range p.FieldAmountRules {
 		m.FieldAmountRule = append(m.FieldAmountRule, fieldAmountRuleModel{
+			Condition:       conditionToModel(r.Condition),
 			AmountFieldName: types.StringValue(r.AmountFieldName),
 			Description:     nullIfEmptyPtr(r.Description),
 		})
@@ -450,6 +459,7 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 		}
 		pm, _ := types.MapValueFrom(context.Background(), types.Int64Type, priceMap)
 		m.LineItem = append(m.LineItem, lineItemModel{
+			Condition:         conditionToModel(li.Condition),
 			FieldName:         types.StringValue(li.FieldName),
 			PriceMap:          pm,
 			QuantityFieldName: nullIfEmptyPtr(li.QuantityFieldName),
@@ -849,17 +859,20 @@ func keepEmptyPaymentStrings(m *paymentModel, prior paymentModel) {
 	if len(m.FixedRule) == len(prior.FixedRule) {
 		for i := range m.FixedRule {
 			keepEmptyPrior(&m.FixedRule[i].Description, prior.FixedRule[i].Description)
+			keepEmptyConditionStrings(m.FixedRule[i].Condition, prior.FixedRule[i].Condition)
 		}
 	}
 	if len(m.FieldAmountRule) == len(prior.FieldAmountRule) {
 		for i := range m.FieldAmountRule {
 			keepEmptyPrior(&m.FieldAmountRule[i].Description, prior.FieldAmountRule[i].Description)
+			keepEmptyConditionStrings(m.FieldAmountRule[i].Condition, prior.FieldAmountRule[i].Condition)
 		}
 	}
 	if len(m.LineItem) == len(prior.LineItem) {
 		for i := range m.LineItem {
 			keepEmptyPrior(&m.LineItem[i].QuantityFieldName, prior.LineItem[i].QuantityFieldName)
 			keepEmptyPrior(&m.LineItem[i].Description, prior.LineItem[i].Description)
+			keepEmptyConditionStrings(m.LineItem[i].Condition, prior.LineItem[i].Condition)
 		}
 	}
 }

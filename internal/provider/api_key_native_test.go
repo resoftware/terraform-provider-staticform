@@ -76,7 +76,7 @@ func TestAPIKeyResourceNativeStateAndImportedIdentity(t *testing.T) {
 			revoked := false
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
-				case r.Method == http.MethodPost && r.URL.Path == "/identity/v1/api-keys":
+				case r.Method == http.MethodPost && r.URL.Path == "/api/v1/api-keys":
 					fmt.Fprintf(w, `{"apiKeyId":%q,"plainKey":"sf_test_created","keyHint":"created","name":"CI","formIds":[]}`, id)
 				case r.Method == http.MethodGet:
 					if metadataFails {
@@ -84,12 +84,12 @@ func TestAPIKeyResourceNativeStateAndImportedIdentity(t *testing.T) {
 						return
 					}
 					fmt.Fprintf(w, `{"items":[{"id":%q,"name":%q,"keyHint":"created","createdAtUtc":"2026-10-13T12:00:00Z","scopedPermissions":["User.Forms.GetById"],"formIds":[]}],"hasNextPage":false}`, id, name)
-				case r.Method == http.MethodPut && r.URL.Path == "/identity/v1/api-keys/"+id+"/permissions":
+				case r.Method == http.MethodPut && r.URL.Path == "/api/v1/api-keys/"+id+"/permissions":
 					var req client.APIKeyUpdateRequest
 					json.NewDecoder(r.Body).Decode(&req)
 					name = req.Name
 					w.WriteHeader(http.StatusNoContent)
-				case r.Method == http.MethodDelete && r.URL.Path == "/identity/v1/api-keys/"+id:
+				case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/api-keys/"+id:
 					revoked = true
 					w.WriteHeader(http.StatusNoContent)
 				default:

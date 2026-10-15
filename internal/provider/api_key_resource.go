@@ -77,14 +77,14 @@ func (r *apiKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:            true,
 				ElementType:         types.StringType,
 				Validators:          []validator.Set{setvalidator.SizeAtLeast(1)},
-				MarkdownDescription: "Native User.* permission names to scope the key to. Historical product names are translated for existing configurations. Omit to inherit the owner's delegable permissions. Explicit empty sets are rejected to avoid converting legacy deny-all configuration into owner-wide access. Updatable in place.",
+				MarkdownDescription: "`User.*` permission names to scope the key to, as listed by the `staticform_api_key_permissions` data source. Names are used exactly as written, and every endpoint has its own permission. Historical product names are translated to every per-endpoint permission that replaced them. Omit to inherit the owner's delegable permissions. The key used by the provider must hold every permission granted here. Explicit empty sets are rejected to avoid converting legacy deny-all configuration into owner-wide access. Updatable in place.",
 				PlanModifiers:       []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 			},
 			"form_ids": schema.SetAttribute{
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "Form IDs to scope the key to. Omit for all of the user's forms. Updatable in place.",
+				MarkdownDescription: "Form IDs to scope the key to. Omit for all of the user's forms. A restricted provider key can only grant form scopes within its own. Updatable in place.",
 				PlanModifiers:       []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 			},
 			"key": schema.StringAttribute{

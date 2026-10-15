@@ -201,30 +201,34 @@ type formResourceModel struct {
 }
 
 type fixedRuleModel struct {
-	AmountCents types.Int64  `tfsdk:"amount_cents"`
-	Description types.String `tfsdk:"description"`
+	AmountCents types.Int64         `tfsdk:"amount_cents"`
+	Description types.String        `tfsdk:"description"`
+	Condition   []runConditionModel `tfsdk:"condition"`
 }
 
 type fieldAmountRuleModel struct {
-	AmountFieldName types.String `tfsdk:"amount_field_name"`
-	Description     types.String `tfsdk:"description"`
+	AmountFieldName types.String        `tfsdk:"amount_field_name"`
+	Description     types.String        `tfsdk:"description"`
+	Condition       []runConditionModel `tfsdk:"condition"`
 }
 
 type lineItemModel struct {
-	FieldName         types.String `tfsdk:"field_name"`
-	PriceMap          types.Map    `tfsdk:"price_map"`
-	QuantityFieldName types.String `tfsdk:"quantity_field_name"`
-	Description       types.String `tfsdk:"description"`
+	FieldName         types.String        `tfsdk:"field_name"`
+	PriceMap          types.Map           `tfsdk:"price_map"`
+	QuantityFieldName types.String        `tfsdk:"quantity_field_name"`
+	Description       types.String        `tfsdk:"description"`
+	Condition         []runConditionModel `tfsdk:"condition"`
 }
 
 type paymentModel struct {
-	ConnectionID           types.String           `tfsdk:"connection_id"`
-	Currency               types.String           `tfsdk:"currency"`
-	Mode                   types.String           `tfsdk:"mode"`
-	CustomerEmailFieldName types.String           `tfsdk:"customer_email_field_name"`
-	FixedRule              []fixedRuleModel       `tfsdk:"fixed_rule"`
-	FieldAmountRule        []fieldAmountRuleModel `tfsdk:"field_amount_rule"`
-	LineItem               []lineItemModel        `tfsdk:"line_item"`
+	ConnectionID             types.String           `tfsdk:"connection_id"`
+	Currency                 types.String           `tfsdk:"currency"`
+	Mode                     types.String           `tfsdk:"mode"`
+	CustomerEmailFieldName   types.String           `tfsdk:"customer_email_field_name"`
+	PaymentRequiredCondition []runConditionModel    `tfsdk:"payment_required_condition"`
+	FixedRule                []fixedRuleModel       `tfsdk:"fixed_rule"`
+	FieldAmountRule          []fieldAmountRuleModel `tfsdk:"field_amount_rule"`
+	LineItem                 []lineItemModel        `tfsdk:"line_item"`
 }
 
 func (r *formResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -475,12 +479,18 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"customer_email_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used."},
 					},
 					Blocks: map[string]schema.Block{
+						"payment_required_condition": conditionGroupBlock("Optional: payment is only required when these conditions match the submission; otherwise the form is submitted without a charge. " +
+							"When this block is omitted, the provider keeps the condition the API currently holds (for example one set in the dashboard) and does not track it. " +
+							"An empty block (`payment_required_condition {}`) removes the condition, so payment is always required."),
 						"fixed_rule": schema.ListNestedBlock{
 							MarkdownDescription: "Fixed-amount pricing rules (mode `Fixed`).",
 							NestedObject: schema.NestedBlockObject{
 								Attributes: map[string]schema.Attribute{
 									"amount_cents": schema.Int64Attribute{Required: true, Validators: []validator.Int64{int64validator.AtLeast(0)}, MarkdownDescription: "Charge amount in the smallest currency unit."},
 									"description":  schema.StringAttribute{Optional: true, MarkdownDescription: "Stripe line-item label."},
+								},
+								Blocks: map[string]schema.Block{
+									"condition": conditionGroupBlock("Optional: this rule only applies when these conditions match the submission."),
 								},
 							},
 						},
@@ -490,6 +500,9 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 								Attributes: map[string]schema.Attribute{
 									"amount_field_name": schema.StringAttribute{Required: true, MarkdownDescription: "Number field whose value is the charge."},
 									"description":       schema.StringAttribute{Optional: true},
+								},
+								Blocks: map[string]schema.Block{
+									"condition": conditionGroupBlock("Optional: this rule only applies when these conditions match the submission."),
 								},
 							},
 						},
@@ -501,6 +514,9 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 									"price_map":           schema.MapAttribute{Required: true, ElementType: types.Int64Type, Validators: []validator.Map{mapvalidator.ValueInt64sAre(int64validator.AtLeast(0))}, MarkdownDescription: "Map of option value to price (smallest currency unit)."},
 									"quantity_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Optional number field used as a quantity multiplier."},
 									"description":         schema.StringAttribute{Optional: true},
+								},
+								Blocks: map[string]schema.Block{
+									"condition": conditionGroupBlock("Optional: this line item only applies when these conditions match the submission."),
 								},
 							},
 						},
@@ -604,7 +620,7 @@ func (r *formResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	body, d := r.toRequest(ctx, plan)
+	body, d := r.toRequest(ctx, plan, paymentExtras{})
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -639,7 +655,7 @@ func (r *formResource) Create(ctx context.Context, req resource.CreateRequest, r
 			return
 		}
 		srcMap := attachmentSourceMap(plan)
-		body2, d2 := r.toRequest(ctx, plan)
+		body2, d2 := r.toRequest(ctx, plan, paymentExtrasFrom(form))
 		resp.Diagnostics.Append(d2...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -656,6 +672,7 @@ func (r *formResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 
 	resp.Diagnostics.Append(r.syncTags(ctx, form.ID, cfgTags, &plan)...)
+	resp.Diagnostics.Append(storePaymentExtras(ctx, resp.Private, paymentExtrasFrom(form))...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -708,6 +725,7 @@ func (r *formResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	srcMap := attachmentSourceMap(state)
 	resp.Diagnostics.Append(r.apply(ctx, form, &state)...)
 	mergeAttachmentSources(&state, srcMap)
+	resp.Diagnostics.Append(storePaymentExtras(ctx, resp.Private, paymentExtrasFrom(form))...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -736,7 +754,13 @@ func (r *formResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		srcMap = attachmentSourceMap(plan)
 	}
 
-	body, d := r.toRequest(ctx, plan)
+	extras, dx := loadPaymentExtras(ctx, req.Private)
+	resp.Diagnostics.Append(dx...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	body, d := r.toRequest(ctx, plan, extras)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -753,6 +777,7 @@ func (r *formResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		mergeAttachmentSources(&plan, srcMap)
 	}
 	resp.Diagnostics.Append(r.syncTags(ctx, form.ID, cfgTags, &plan)...)
+	resp.Diagnostics.Append(storePaymentExtras(ctx, resp.Private, paymentExtrasFrom(form))...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

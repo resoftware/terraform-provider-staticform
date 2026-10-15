@@ -31,13 +31,12 @@ func (c *Client) CreateNotionConnection(ctx context.Context, label, apiKey strin
 
 // ListNotionConnections returns all Notion connections.
 func (c *Client) ListNotionConnections(ctx context.Context) ([]NotionConnection, error) {
-	var env struct {
+	type envelope struct {
 		Connections []NotionConnection `json:"connections"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/api/v1/integrations/notion/connections", nil, &env); err != nil {
-		return nil, err
-	}
-	return env.Connections, nil
+	return listPages(func(page int) ([]NotionConnection, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/integrations/notion/connections", page, func(e envelope) []NotionConnection { return e.Connections })
+	})
 }
 
 // GetNotionConnection finds a Notion connection by ID via the list endpoint.
@@ -51,7 +50,7 @@ func (c *Client) GetNotionConnection(ctx context.Context, id string) (*NotionCon
 			return &conns[i], nil
 		}
 	}
-	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Notion connection not found"}
+	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Not Found", Detail: "Notion connection was not found.", ErrorCode: "NotionConnectionNotFound"}
 }
 
 // DeleteNotionConnection deletes a Notion connection.
@@ -95,13 +94,12 @@ func (c *Client) SetStripeWebhookSecret(ctx context.Context, id, secret string) 
 
 // ListStripeConnections returns all Stripe connections.
 func (c *Client) ListStripeConnections(ctx context.Context) ([]StripeConnection, error) {
-	var env struct {
+	type envelope struct {
 		Connections []StripeConnection `json:"connections"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/api/v1/integrations/stripe/connections", nil, &env); err != nil {
-		return nil, err
-	}
-	return env.Connections, nil
+	return listPages(func(page int) ([]StripeConnection, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/integrations/stripe/connections", page, func(e envelope) []StripeConnection { return e.Connections })
+	})
 }
 
 // GetStripeConnection finds a Stripe connection by ID via the list endpoint.
@@ -115,7 +113,7 @@ func (c *Client) GetStripeConnection(ctx context.Context, id string) (*StripeCon
 			return &conns[i], nil
 		}
 	}
-	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Stripe connection not found"}
+	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Not Found", Detail: "Stripe connection was not found.", ErrorCode: "StripeConnectionNotFound"}
 }
 
 // DeleteStripeConnection deletes a Stripe connection.
@@ -135,11 +133,10 @@ type GoogleConnection struct {
 
 // ListGoogleConnections returns all Google connections.
 func (c *Client) ListGoogleConnections(ctx context.Context) ([]GoogleConnection, error) {
-	var env struct {
+	type envelope struct {
 		Connections []GoogleConnection `json:"connections"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/api/v1/integrations/google/connections", nil, &env); err != nil {
-		return nil, err
-	}
-	return env.Connections, nil
+	return listPages(func(page int) ([]GoogleConnection, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/integrations/google/connections", page, func(e envelope) []GoogleConnection { return e.Connections })
+	})
 }

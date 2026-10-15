@@ -12,7 +12,7 @@ import (
 type APIKeyRequest struct {
 	Name         string   `json:"name"`
 	ExpiresAtUTC *string  `json:"expiresAtUtc,omitempty"`
-	Permissions  []string `json:"scopedPermissions,omitempty"`
+	Permissions  []string `json:"scopedPermissions"`
 	FormIDs      []string `json:"formIds,omitempty"`
 	Password     string   `json:"password,omitempty"`
 	ReauthToken  string   `json:"reauthToken,omitempty"`
@@ -64,12 +64,15 @@ func (c *Client) CreateAPIKey(ctx context.Context, req APIKeyRequest) (*APIKey, 
 		return nil, fmt.Errorf("API-key creation requires key_creation_password or key_creation_reauth_token (or STATICFORM_KEY_CREATION_PASSWORD / STATICFORM_KEY_CREATION_REAUTH_TOKEN)")
 	}
 	req.Permissions = NativeAPIKeyPermissions(req.Permissions)
+	if req.Permissions == nil {
+		req.Permissions = []string{}
+	}
 	var out APIKey
-	if err := c.do(ctx, http.MethodPost, nativeAPIKeysPath, req, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, apiKeysPath, req, &out); err != nil {
 		return nil, err
 	}
 	if out.ID == "" || out.APIKey == "" {
-		return nil, fmt.Errorf("native API-key creation did not return apiKeyId and plainKey")
+		return nil, fmt.Errorf("API-key creation did not return apiKeyId and plainKey")
 	}
 	out.Permissions = req.Permissions
 	metadata, err := c.GetAPIKey(ctx, out.ID)
@@ -81,7 +84,7 @@ func (c *Client) CreateAPIKey(ctx context.Context, req APIKeyRequest) (*APIKey, 
 	return &out, nil
 }
 
-const nativeAPIKeysPath = "/identity/v1/api-keys"
+const apiKeysPath = "/api/v1/api-keys"
 
 // GetAPIKey looks up a single API key by ID from the list endpoint (the API has
 // no get-by-id for keys, and never re-exposes the plaintext key).
@@ -95,7 +98,7 @@ func (c *Client) GetAPIKey(ctx context.Context, id string) (*APIKeyListItem, err
 			return &keys[i], nil
 		}
 	}
-	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "API key not found"}
+	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Not Found", Detail: "API key was not found.", ErrorCode: "ApiKeyNotFound"}
 }
 
 // ListAPIKeys returns all API keys for the authenticated user.
@@ -106,19 +109,19 @@ func (c *Client) ListAPIKeys(ctx context.Context) ([]APIKeyListItem, error) {
 			Items       []APIKeyListItem `json:"items"`
 			HasNextPage bool             `json:"hasNextPage"`
 		}
-		endpoint := fmt.Sprintf("%s?page=%d&pageSize=100", nativeAPIKeysPath, page)
+		endpoint := fmt.Sprintf("%s?page=%d&pageSize=100", apiKeysPath, page)
 		if err := c.do(ctx, http.MethodGet, endpoint, nil, &result); err != nil {
 			return nil, err
 		}
 		if result.Items == nil {
-			return nil, fmt.Errorf("native API-key list did not return the items envelope")
+			return nil, fmt.Errorf("API-key list did not return the items envelope")
 		}
 		keys = append(keys, result.Items...)
 		if !result.HasNextPage {
 			return keys, nil
 		}
 		if len(result.Items) == 0 {
-			return nil, fmt.Errorf("native API-key pagination returned an empty page with hasNextPage")
+			return nil, fmt.Errorf("API-key pagination returned an empty page with hasNextPage")
 		}
 	}
 }
@@ -126,12 +129,15 @@ func (c *Client) ListAPIKeys(ctx context.Context) ([]APIKeyListItem, error) {
 // UpdateAPIKey replaces scoped permissions and form scopes and optionally renames a key.
 func (c *Client) UpdateAPIKey(ctx context.Context, id string, req APIKeyUpdateRequest) error {
 	req.Permissions = NativeAPIKeyPermissions(req.Permissions)
-	return c.do(ctx, http.MethodPut, nativeAPIKeysPath+"/"+url.PathEscape(id)+"/permissions", req, nil)
+	if req.Permissions == nil {
+		req.Permissions = []string{}
+	}
+	return c.do(ctx, http.MethodPut, apiKeysPath+"/"+url.PathEscape(id)+"/permissions", req, nil)
 }
 
 // RevokeAPIKey deletes an API key.
 func (c *Client) RevokeAPIKey(ctx context.Context, id string) error {
-	return c.do(ctx, http.MethodDelete, nativeAPIKeysPath+"/"+url.PathEscape(id), nil, nil)
+	return c.do(ctx, http.MethodDelete, apiKeysPath+"/"+url.PathEscape(id), nil, nil)
 }
 
 // ListAPIKeyPermissions returns the permission names that may be granted to keys.
@@ -139,7 +145,7 @@ func (c *Client) ListAPIKeyPermissions(ctx context.Context) ([]string, error) {
 	var catalog []struct {
 		Name string `json:"name"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/identity/v1/users/me/permissions", nil, &catalog); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/api/v1/users/me/permissions", nil, &catalog); err != nil {
 		return nil, err
 	}
 	out := []string{}
@@ -153,7 +159,7 @@ func (c *Client) ListAPIKeyPermissions(ctx context.Context) ([]string, error) {
 
 func (c *Client) RotateAPIKey(ctx context.Context, id string) (*APIKey, error) {
 	var out APIKey
-	if err := c.do(ctx, http.MethodPost, nativeAPIKeysPath+"/"+url.PathEscape(id)+"/rotate", nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, apiKeysPath+"/"+url.PathEscape(id)+"/rotate", nil, &out); err != nil {
 		return nil, err
 	}
 	out.ID = id

@@ -3,12 +3,12 @@
 page_title: "staticform_user Data Source - staticform"
 subcategory: ""
 description: |-
-  The authenticated account's profile and plan capabilities (read-only). Use the can_use_* flags to gate features in your configuration.
+  The authenticated account's profile and plan capabilities (read-only). Use the can_use_* flags to gate features in your configuration. Requires the User.Account.Get and User.Billing.GetEntitlements permissions.
 ---
 
 # staticform_user (Data Source)
 
-The authenticated account's profile and plan capabilities (read-only). Use the `can_use_*` flags to gate features in your configuration.
+The authenticated account's profile and plan capabilities (read-only). Use the `can_use_*` flags to gate features in your configuration. Requires the `User.Account.Get` and `User.Billing.GetEntitlements` permissions.
 
 
 
@@ -24,5 +24,5 @@ The authenticated account's profile and plan capabilities (read-only). Use the `
 - `can_use_payment_forms` (Boolean)
 - `email` (String)
 - `id` (String) The ID of this resource.
-- `is_admin` (Boolean)
+- `is_admin` (Boolean) Whether the account is a superadmin.
 - `permissions` (List of String)

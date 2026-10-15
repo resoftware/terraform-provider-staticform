@@ -2,44 +2,83 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"net/url"
 )
 
-// Subscription is the account's active subscription (may be empty if none).
-type Subscription struct {
-	ID                    string  `json:"id"`
-	Tier                  string  `json:"tier"`
-	TierName              string  `json:"tierName"`
-	PriceInCents          int64   `json:"priceInCents"`
-	BillingInterval       string  `json:"billingInterval"`
-	Status                string  `json:"status"`
-	CurrentPeriodStartUTC *string `json:"currentPeriodStartUtc"`
-	CurrentPeriodEndUTC   *string `json:"currentPeriodEndUtc"`
-	CancelAtPeriodEnd     bool    `json:"cancelAtPeriodEnd"`
-	CancelledAtUTC        *string `json:"cancelledAtUtc"`
+// ActiveSubscription is the account's current Stripe subscription.
+type ActiveSubscription struct {
+	SubscriptionID     string  `json:"subscriptionId"`
+	StripeProductID    string  `json:"stripeProductId"`
+	StripePriceID      string  `json:"stripePriceId"`
+	Status             string  `json:"status"`
+	Interval           string  `json:"interval"`
+	UnitPriceAmount    float64 `json:"unitPriceAmount"`
+	UnitPriceCurrency  string  `json:"unitPriceCurrency"`
+	CurrentPeriodStart string  `json:"currentPeriodStart"`
+	CurrentPeriodEnd   string  `json:"currentPeriodEnd"`
+	TrialEndUTC        *string `json:"trialEndUtc"`
+	CancelAtPeriodEnd  bool    `json:"cancelAtPeriodEnd"`
+	CanceledAtUTC      *string `json:"canceledAtUtc"`
 }
 
-// GetSubscription returns the current subscription, or nil if there is none.
-func (c *Client) GetSubscription(ctx context.Context) (*Subscription, error) {
-	var out *Subscription
-	if err := c.do(ctx, http.MethodGet, "/api/v1/subscriptions/my", nil, &out); err != nil {
+// Billing is the account's billing state: Stripe customer, active subscription
+// (nil when there is none) and the entitlement keys it grants.
+type Billing struct {
+	HasBillingAccount  bool                `json:"hasBillingAccount"`
+	StripeCustomerID   *string             `json:"stripeCustomerId"`
+	ActiveSubscription *ActiveSubscription `json:"activeSubscription"`
+	Entitlements       []string            `json:"entitlements"`
+}
+
+// GetBilling returns the account's billing state.
+func (c *Client) GetBilling(ctx context.Context) (*Billing, error) {
+	var out Billing
+	if err := c.do(ctx, http.MethodGet, "/api/v1/billing/me", nil, &out); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return &out, nil
 }
 
-// UserProfile is the authenticated user's profile and plan capabilities.
+// Entitlement keys that gate form features.
+const (
+	EntitlementGoogleSheets       = "forms.google-sheets"
+	EntitlementNotion             = "forms.notion"
+	EntitlementEmailAttachments   = "forms.email-attachments"
+	EntitlementConditionalActions = "forms.conditional-actions"
+	EntitlementPaymentForms       = "forms.payments"
+)
+
+// Entitlements lists the feature keys granted to the account.
+type Entitlements struct {
+	FeatureKeys []string `json:"featureKeys"`
+}
+
+// Has reports whether the account holds the feature key.
+func (e Entitlements) Has(key string) bool {
+	for _, k := range e.FeatureKeys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// GetEntitlements returns the feature keys granted to the account.
+func (c *Client) GetEntitlements(ctx context.Context) (*Entitlements, error) {
+	var out Entitlements
+	if err := c.do(ctx, http.MethodGet, "/api/v1/billing/entitlements", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UserProfile is the authenticated user's account details.
 type UserProfile struct {
-	ID                             string   `json:"id"`
-	Email                          string   `json:"email"`
-	IsAdmin                        bool     `json:"isAdmin"`
-	CanUseGoogleSheets             bool     `json:"canUseGoogleSheets"`
-	CanUseNotion                   bool     `json:"canUseNotion"`
-	CanUseEmailAttachments         bool     `json:"canUseEmailAttachments"`
-	CanUseConditionalSubmitActions bool     `json:"canUseConditionalSubmitActions"`
-	CanUsePaymentForms             bool     `json:"canUsePaymentForms"`
-	Permissions                    []string `json:"permissions"`
+	ID           string   `json:"id"`
+	Email        string   `json:"email"`
+	IsSuperAdmin bool     `json:"isSuperAdmin"`
+	Permissions  []string `json:"permissions"`
 }
 
 // GetProfile returns the authenticated user's profile.
@@ -71,25 +110,18 @@ type ExecutionLog struct {
 // ListExecutionLogs returns submit-action execution logs, optionally filtered by
 // form ID, following pagination.
 func (c *Client) ListExecutionLogs(ctx context.Context, formID string) ([]ExecutionLog, error) {
-	var all []ExecutionLog
-	page := 1
-	for {
+	path := "/api/v1/execution-logs"
+	if formID != "" {
+		path += "?formId=" + url.QueryEscape(formID)
+	}
+	return listPages(func(page int) ([]ExecutionLog, int, error) {
 		var resp struct {
 			Logs       []ExecutionLog `json:"logs"`
 			TotalCount int            `json:"totalCount"`
 		}
-		path := fmt.Sprintf("/api/v1/execution-logs?page=%d&pageSize=100", page)
-		if formID != "" {
-			path += "&formId=" + formID
+		if err := c.do(ctx, http.MethodGet, pagedPath(path, "page", page), nil, &resp); err != nil {
+			return nil, 0, err
 		}
-		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-			return nil, err
-		}
-		all = append(all, resp.Logs...)
-		if len(resp.Logs) == 0 || len(all) >= resp.TotalCount {
-			break
-		}
-		page++
-	}
-	return all, nil
+		return resp.Logs, resp.TotalCount, nil
+	})
 }

@@ -23,7 +23,7 @@ func TestNativeAPIKeyLifecycle(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == nativeAPIKeysPath:
+		case r.Method == http.MethodPost && r.URL.Path == apiKeysPath:
 			var req map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatal(err)
@@ -35,7 +35,7 @@ func TestNativeAPIKeyLifecycle(t *testing.T) {
 				t.Error("legacy scope was not translated")
 			}
 			fmt.Fprintf(w, `{"apiKeyId":%q,"plainKey":"sf_test_created","keyHint":"created","name":"CI","expiresAtUtc":null,"formIds":[%q]}`, keyID, formIDs[0])
-		case r.Method == http.MethodGet && r.URL.Path == nativeAPIKeysPath:
+		case r.Method == http.MethodGet && r.URL.Path == apiKeysPath:
 			if r.URL.Query().Get("pageSize") != "100" {
 				t.Error("missing native page size")
 			}
@@ -48,12 +48,12 @@ func TestNativeAPIKeyLifecycle(t *testing.T) {
 				}
 				json.NewEncoder(w).Encode(map[string]any{"items": items, "hasNextPage": false})
 			}
-		case r.Method == http.MethodPut && r.URL.Path == nativeAPIKeysPath+"/"+keyID+"/permissions":
+		case r.Method == http.MethodPut && r.URL.Path == apiKeysPath+"/"+keyID+"/permissions":
 			var req APIKeyUpdateRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(req.Permissions, []string{"User.Submissions.ListAll"}) {
+			if !reflect.DeepEqual(req.Permissions, []string{"User.Submissions.ListAll", "User.Submissions.GetUnreadCount"}) {
 				t.Error("wrong native update scopes")
 			}
 			if req.FormIDs == nil {
@@ -61,12 +61,12 @@ func TestNativeAPIKeyLifecycle(t *testing.T) {
 			}
 			name, permissions, formIDs = req.Name, req.Permissions, req.FormIDs
 			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPost && r.URL.Path == nativeAPIKeysPath+"/"+keyID+"/rotate":
+		case r.Method == http.MethodPost && r.URL.Path == apiKeysPath+"/"+keyID+"/rotate":
 			fmt.Fprint(w, `{"plainKey":"sf_test_rotated","keyHint":"rotated"}`)
-		case r.Method == http.MethodDelete && r.URL.Path == nativeAPIKeysPath+"/"+keyID:
+		case r.Method == http.MethodDelete && r.URL.Path == apiKeysPath+"/"+keyID:
 			deleted = true
 			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodGet && r.URL.Path == "/identity/v1/users/me/permissions":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/me/permissions":
 			fmt.Fprint(w, `[{"name":"Admin.Users.Delete","isReadOnly":false},{"name":"User.Forms.GetById","isReadOnly":true},{"name":"User.ApiKeys.Create","isReadOnly":false}]`)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)

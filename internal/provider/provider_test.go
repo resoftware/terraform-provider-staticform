@@ -29,14 +29,14 @@ func TestProviderSchema(t *testing.T) {
 	}
 	wantResources := []string{
 		"staticform_form", "staticform_api_key", "staticform_smtp_connection",
-		"staticform_email_domain", "staticform_collaborator",
+		"staticform_email_domain", "staticform_collaborator", "staticform_user_settings", "staticform_notification_preferences",
 	}
 	for _, name := range wantResources {
 		if _, ok := resp.ResourceSchemas[name]; !ok {
 			t.Errorf("missing resource schema: %s", name)
 		}
 	}
-	wantData := []string{"staticform_form", "staticform_forms", "staticform_api_key_permissions"}
+	wantData := []string{"staticform_form", "staticform_forms", "staticform_api_key_permissions", "staticform_subscription", "staticform_user", "staticform_notification_preferences"}
 	for _, name := range wantData {
 		if _, ok := resp.DataSourceSchemas[name]; !ok {
 			t.Errorf("missing data source schema: %s", name)

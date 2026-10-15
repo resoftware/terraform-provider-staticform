@@ -46,13 +46,12 @@ func (c *Client) CreateSMTPConnection(ctx context.Context, req SMTPConnectionReq
 
 // ListSMTPConnections returns all SMTP connections for the user.
 func (c *Client) ListSMTPConnections(ctx context.Context) ([]SMTPConnection, error) {
-	var env struct {
+	type envelope struct {
 		Connections []SMTPConnection `json:"connections"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/api/v1/integrations/smtp/connections", nil, &env); err != nil {
-		return nil, err
-	}
-	return env.Connections, nil
+	return listPages(func(page int) ([]SMTPConnection, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/integrations/smtp/connections", page, func(e envelope) []SMTPConnection { return e.Connections })
+	})
 }
 
 // GetSMTPConnection finds a connection by ID via the list endpoint.
@@ -66,7 +65,7 @@ func (c *Client) GetSMTPConnection(ctx context.Context, id string) (*SMTPConnect
 			return &conns[i], nil
 		}
 	}
-	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "SMTP connection not found"}
+	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Not Found", Detail: "SMTP connection was not found.", ErrorCode: "SmtpConnectionNotFound"}
 }
 
 // DeleteSMTPConnection deletes an SMTP connection.
@@ -114,13 +113,12 @@ func (c *Client) CreateEmailDomain(ctx context.Context, req EmailDomainRequest) 
 
 // ListEmailDomains returns all sending domains for the user.
 func (c *Client) ListEmailDomains(ctx context.Context) ([]EmailDomain, error) {
-	var env struct {
+	type envelope struct {
 		Domains []EmailDomain `json:"domains"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/api/v1/integrations/email-domains", nil, &env); err != nil {
-		return nil, err
-	}
-	return env.Domains, nil
+	return listPages(func(page int) ([]EmailDomain, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/integrations/email-domains", page, func(e envelope) []EmailDomain { return e.Domains })
+	})
 }
 
 // GetEmailDomain finds a domain by ID via the list endpoint.
@@ -134,7 +132,7 @@ func (c *Client) GetEmailDomain(ctx context.Context, id string) (*EmailDomain, e
 			return &domains[i], nil
 		}
 	}
-	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "email domain not found"}
+	return nil, &APIError{StatusCode: http.StatusNotFound, Title: "Not Found", Detail: "Email domain was not found.", ErrorCode: "EmailDomainNotFound"}
 }
 
 // DeleteEmailDomain removes a sending domain.

@@ -68,6 +68,60 @@ resource "staticform_form" "contact" {
   }
 }
 
+variable "stripe_connection_id" {
+  type = string
+}
+
+resource "staticform_form" "order" {
+  name = "Order form"
+
+  field {
+    name     = "email"
+    type     = "Text"
+    rule     = "Email"
+    required = true
+  }
+
+  field {
+    name = "coupon"
+    type = "Text"
+  }
+
+  redirect {
+    success {
+      type       = "CustomUrl"
+      custom_url = "https://example.com/paid"
+    }
+    error {
+      type       = "CustomUrl"
+      custom_url = "https://example.com/payment-failed"
+    }
+  }
+
+  payment {
+    connection_id = var.stripe_connection_id
+    currency      = "eur"
+    mode          = "Fixed"
+
+    # Submissions with a coupon code are free. When this block is omitted, a
+    # condition set in the dashboard is kept; `payment_required_condition {}`
+    # removes it.
+    payment_required_condition {
+      connector = "And"
+
+      condition {
+        field_name = "coupon"
+        operator   = "IsEmpty"
+      }
+    }
+
+    fixed_rule {
+      amount_cents = 2500
+      description  = "Registration"
+    }
+  }
+}
+
 output "form_id" {
   value = staticform_form.contact.id
 }
@@ -136,6 +190,7 @@ Optional:
 - `field_amount_rule` (Block List) Amount-from-field rules (mode `FieldAmount`). (see [below for nested schema](#nestedblock--payment--field_amount_rule))
 - `fixed_rule` (Block List) Fixed-amount pricing rules (mode `Fixed`). (see [below for nested schema](#nestedblock--payment--fixed_rule))
 - `line_item` (Block List) Line items priced from fields (mode `LineItems`). (see [below for nested schema](#nestedblock--payment--line_item))
+- `payment_required_condition` (Block List) Optional: payment is only required when these conditions match the submission; otherwise the form is submitted without a charge. When this block is omitted, the provider keeps the condition the API currently holds (for example one set in the dashboard) and does not track it. An empty block (`payment_required_condition {}`) removes the condition, so payment is always required. (see [below for nested schema](#nestedblock--payment--payment_required_condition))
 
 <a id="nestedblock--payment--field_amount_rule"></a>
 ### Nested Schema for `payment.field_amount_rule`
@@ -146,7 +201,31 @@ Required:
 
 Optional:
 
+- `condition` (Block List) Optional: this rule only applies when these conditions match the submission. (see [below for nested schema](#nestedblock--payment--field_amount_rule--condition))
 - `description` (String)
+
+<a id="nestedblock--payment--field_amount_rule--condition"></a>
+### Nested Schema for `payment.field_amount_rule.condition`
+
+Optional:
+
+- `condition` (Block List) (see [below for nested schema](#nestedblock--payment--field_amount_rule--condition--condition))
+- `connector` (String) `And` or `Or` joining the conditions.
+
+<a id="nestedblock--payment--field_amount_rule--condition--condition"></a>
+### Nested Schema for `payment.field_amount_rule.condition.condition`
+
+Required:
+
+- `field_name` (String)
+- `operator` (String) `Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`.
+
+Optional:
+
+- `case_sensitive` (Boolean)
+- `value` (String)
+
+
 
 
 <a id="nestedblock--payment--fixed_rule"></a>
@@ -158,7 +237,31 @@ Required:
 
 Optional:
 
+- `condition` (Block List) Optional: this rule only applies when these conditions match the submission. (see [below for nested schema](#nestedblock--payment--fixed_rule--condition))
 - `description` (String) Stripe line-item label.
+
+<a id="nestedblock--payment--fixed_rule--condition"></a>
+### Nested Schema for `payment.fixed_rule.condition`
+
+Optional:
+
+- `condition` (Block List) (see [below for nested schema](#nestedblock--payment--fixed_rule--condition--condition))
+- `connector` (String) `And` or `Or` joining the conditions.
+
+<a id="nestedblock--payment--fixed_rule--condition--condition"></a>
+### Nested Schema for `payment.fixed_rule.condition.condition`
+
+Required:
+
+- `field_name` (String)
+- `operator` (String) `Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`.
+
+Optional:
+
+- `case_sensitive` (Boolean)
+- `value` (String)
+
+
 
 
 <a id="nestedblock--payment--line_item"></a>
@@ -171,8 +274,55 @@ Required:
 
 Optional:
 
+- `condition` (Block List) Optional: this line item only applies when these conditions match the submission. (see [below for nested schema](#nestedblock--payment--line_item--condition))
 - `description` (String)
 - `quantity_field_name` (String) Optional number field used as a quantity multiplier.
+
+<a id="nestedblock--payment--line_item--condition"></a>
+### Nested Schema for `payment.line_item.condition`
+
+Optional:
+
+- `condition` (Block List) (see [below for nested schema](#nestedblock--payment--line_item--condition--condition))
+- `connector` (String) `And` or `Or` joining the conditions.
+
+<a id="nestedblock--payment--line_item--condition--condition"></a>
+### Nested Schema for `payment.line_item.condition.condition`
+
+Required:
+
+- `field_name` (String)
+- `operator` (String) `Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`.
+
+Optional:
+
+- `case_sensitive` (Boolean)
+- `value` (String)
+
+
+
+
+<a id="nestedblock--payment--payment_required_condition"></a>
+### Nested Schema for `payment.payment_required_condition`
+
+Optional:
+
+- `condition` (Block List) (see [below for nested schema](#nestedblock--payment--payment_required_condition--condition))
+- `connector` (String) `And` or `Or` joining the conditions.
+
+<a id="nestedblock--payment--payment_required_condition--condition"></a>
+### Nested Schema for `payment.payment_required_condition.condition`
+
+Required:
+
+- `field_name` (String)
+- `operator` (String) `Equals`, `NotEmpty`, `IsEmpty`, `Contains`, `MatchesRegex`, `NotMatchesRegex`.
+
+Optional:
+
+- `case_sensitive` (Boolean)
+- `value` (String)
+
 
 
 

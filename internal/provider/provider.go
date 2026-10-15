@@ -117,6 +117,7 @@ func (p *StaticFormProvider) Resources(_ context.Context) []func() resource.Reso
 		NewEmailDomainResource,
 		NewCollaboratorResource,
 		NewUserSettingsResource,
+		NewNotificationPreferencesResource,
 		NewNotionConnectionResource,
 		NewStripeConnectionResource,
 	}
@@ -134,5 +135,6 @@ func (p *StaticFormProvider) DataSources(_ context.Context) []func() datasource.
 		NewSubscriptionDataSource,
 		NewUserDataSource,
 		NewExecutionLogsDataSource,
+		NewNotificationPreferencesDataSource,
 	}
 }
