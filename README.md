@@ -185,7 +185,11 @@ Then `go install .` and run `terraform plan` / `tofu plan` against your config.
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions runs GoReleaser, which
 builds cross-platform binaries and a GPG-signed `SHA256SUMS` file. The repo needs
 `GPG_PRIVATE_KEY` and `PASSPHRASE` secrets. The same release artifacts feed both
-registries; both verify with the same GPG public key.
+registries; both verify with the same GPG public key. The protocol manifest must be included in
+both `release.extra_files` and `checksum.extra_files` with the same versioned filename.
+Terraform Registry rejects a release when the signed checksum file omits the manifest.
+For the `resoftware` namespace, resync missing versions in HCP Terraform under
+**Registry > Public namespaces > resoftware > Providers > asset options > Resync provider**.
 
 - **Terraform Registry**: sign in at [registry.terraform.io](https://registry.terraform.io),
   add the GPG public key under the `resoftware` organization, then
