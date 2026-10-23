@@ -23,11 +23,12 @@ type FieldConfig struct {
 
 // Field is one form input definition.
 type Field struct {
-	Name     string       `json:"name"`
-	Type     string       `json:"type"`
-	Rule     string       `json:"rule"`
-	Required bool         `json:"required"`
-	Config   *FieldConfig `json:"config,omitempty"`
+	Name      string       `json:"name"`
+	Type      string       `json:"type"`
+	Rule      string       `json:"rule"`
+	Required  bool         `json:"required"`
+	Sensitive *bool        `json:"sensitive,omitempty"`
+	Config    *FieldConfig `json:"config,omitempty"`
 }
 
 // GoogleSheetsColumnMapping maps a sheet column to a form field.
@@ -67,11 +68,12 @@ type ConditionGroup struct {
 // The Type field selects which other fields are meaningful; unused fields are
 // omitted on the wire and ignored by the server.
 type SubmitAction struct {
-	Type         string          `json:"type"`
-	ID           *string         `json:"id,omitempty"`
-	Name         string          `json:"name"`
-	Enabled      bool            `json:"enabled"`
-	RunCondition *ConditionGroup `json:"runCondition,omitempty"`
+	Type            string          `json:"type"`
+	ID              *string         `json:"id,omitempty"`
+	Name            string          `json:"name"`
+	Enabled         bool            `json:"enabled"`
+	RunCondition    *ConditionGroup `json:"runCondition,omitempty"`
+	SensitiveFields []string        `json:"sensitiveFields"`
 
 	// SendEmailAction
 	Recipient           string                      `json:"recipient,omitempty"`
@@ -213,6 +215,7 @@ type PaymentSettings struct {
 // (AllowedDomains, AiSpamReviewExcludedFields) are set to an empty slice to
 // clear a list.
 type FormRequest struct {
+	ConfirmSensitiveFields     bool              `json:"confirmSensitiveFields,omitempty"`
 	Name                       string            `json:"name"`
 	Fields                     []Field           `json:"fields"`
 	SubmitActions              []SubmitAction    `json:"submitActions"`

@@ -42,6 +42,47 @@ resource "staticform_form" "contact" {
 }
 ```
 
+## Sensitive fields
+
+Requires the current StaticForm API. Sensitivity is server policy, separate from Terraform's
+`sensitive` output-redaction keyword. The same configuration works with Terraform and OpenTofu:
+
+```hcl
+resource "staticform_form" "protected" {
+  name                     = "Protected contact"
+  confirm_sensitive_fields = true
+
+  field {
+    name      = "bsn"
+    type      = "Text"
+    sensitive = true
+  }
+
+  submit_action {
+    type             = "SendEmailAction"
+    name             = "Approved notification"
+    recipient        = "authorized@example.com"
+    body_template    = "Reference: {{form.bsn}}"
+    sensitive_fields = ["bsn"]
+  }
+}
+```
+
+Sensitive fields stay encrypted and masked on ordinary reads. An action receives originals only
+for its explicit `sensitive_fields` selection. The API requires `confirm_sensitive_fields = true`
+for new approvals, destination/configuration changes and disabling protection for future submissions.
+No password is required. Terraform/OpenTofu also emits a sharing warning. Review each plan before
+applying: leaving the confirmation flag true acknowledges future applies too.
+
+Omitting `field.sensitive` or `submit_action.sensitive_fields` preserves the server value across
+refresh/import and unrelated updates. For new fields/actions, the defaults are false/no approval.
+Use explicit `false` to stop protection for future intake, or an explicit empty set to revoke sharing.
+Historical protected values remain encrypted. File fields cannot be marked sensitive.
+
+The form data source exposes sensitive field names as `sensitive_fields`. Submission and execution-log
+data sources keep the API's masked values; this provider never calls the sensitive-value reveal endpoint
+or stores originals in state. Assigning read-sensitive permission to the provider key does not change that.
+
 ## Authentication
 
 Create an API key under **Settings → API Keys** in the dashboard and pass it via

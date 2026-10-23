@@ -24,4 +24,5 @@ Look up an existing StaticForm form by ID.
 - `ai_spam_review_excluded_fields` (List of String) Field names never sent to the AI spam reviewer. Null when the API does not report it.
 - `enable_ai_spam_review` (Boolean) Whether uncertain submissions are sent to an AI model for a second spam opinion. Null when the API does not report it.
 - `name` (String) Form name.
+- `sensitive_fields` (Set of String) Names of fields encrypted and masked by StaticForm. Contains policy metadata only, never submitted originals.
 - `submission_mode` (String) `ClientSide` or `ServerSide`.

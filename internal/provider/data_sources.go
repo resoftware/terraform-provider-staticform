@@ -24,6 +24,7 @@ func NewFormDataSource() datasource.DataSource { return &formDataSource{} }
 type formDataSource struct{ client *client.Client }
 
 type formDataSourceModel struct {
+	SensitiveFields      types.Set    `tfsdk:"sensitive_fields"`
 	ID                   types.String `tfsdk:"id"`
 	Name                 types.String `tfsdk:"name"`
 	SubmissionMode       types.String `tfsdk:"submission_mode"`
@@ -51,9 +52,10 @@ func (d *formDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 	resp.Schema = dschema.Schema{
 		MarkdownDescription: "Look up an existing StaticForm form by ID.",
 		Attributes: map[string]dschema.Attribute{
-			"id":              dschema.StringAttribute{Required: true, MarkdownDescription: "Form ID."},
-			"name":            dschema.StringAttribute{Computed: true, MarkdownDescription: "Form name."},
-			"submission_mode": dschema.StringAttribute{Computed: true, MarkdownDescription: "`ClientSide` or `ServerSide`."},
+			"id":               dschema.StringAttribute{Required: true, MarkdownDescription: "Form ID."},
+			"name":             dschema.StringAttribute{Computed: true, MarkdownDescription: "Form name."},
+			"submission_mode":  dschema.StringAttribute{Computed: true, MarkdownDescription: "`ClientSide` or `ServerSide`."},
+			"sensitive_fields": dschema.SetAttribute{Computed: true, ElementType: types.StringType, MarkdownDescription: "Names of fields encrypted and masked by StaticForm. Contains policy metadata only, never submitted originals."},
 			"enable_ai_spam_review": dschema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether uncertain submissions are sent to an AI model for a second spam opinion. Null when the API does not report it.",
@@ -77,6 +79,13 @@ func (d *formDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		resp.Diagnostics.AddError("Error reading form", err.Error())
 		return
 	}
+	names := []string{}
+	for _, field := range form.Fields {
+		if field.Sensitive != nil && *field.Sensitive {
+			names = append(names, field.Name)
+		}
+	}
+	cfg.SensitiveFields = toStringSet(names)
 	cfg.Name = types.StringValue(form.Name)
 	cfg.SubmissionMode = types.StringValue(form.SubmissionMode)
 	cfg.EnableAiSpamReview = boolFromPtr(form.EnableAiSpamReview)

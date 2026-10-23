@@ -16,8 +16,9 @@ func (r *formResource) toRequest(ctx context.Context, m formResourceModel, extra
 	var diags diag.Diagnostics
 
 	body := client.FormRequest{
-		Name:           m.Name.ValueString(),
-		SubmissionMode: strPtr(optStr(m.SubmissionMode)),
+		Name:                   m.Name.ValueString(),
+		ConfirmSensitiveFields: m.ConfirmSensitiveFields.ValueBool(),
+		SubmissionMode:         strPtr(optStr(m.SubmissionMode)),
 	}
 
 	if !m.CaptchaType.IsNull() {
@@ -66,10 +67,11 @@ func (r *formResource) toRequest(ctx context.Context, m formResourceModel, extra
 
 	for _, f := range m.Fields {
 		field := client.Field{
-			Name:     f.Name.ValueString(),
-			Type:     f.Type.ValueString(),
-			Rule:     valueOr(f.Rule, "None"),
-			Required: f.Required.ValueBool(),
+			Name:      f.Name.ValueString(),
+			Type:      f.Type.ValueString(),
+			Rule:      valueOr(f.Rule, "None"),
+			Required:  f.Required.ValueBool(),
+			Sensitive: boolPtr(f.Sensitive),
 		}
 		vc, d := stringMap(ctx, f.ValidationConfig)
 		diags.Append(d...)
@@ -99,10 +101,16 @@ func (r *formResource) toRequest(ctx context.Context, m formResourceModel, extra
 
 func (r *formResource) actionToClient(ctx context.Context, a submitActionModel) (client.SubmitAction, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	sensitiveFields, sensitiveDiags := stringSet(ctx, a.SensitiveFields)
+	diags.Append(sensitiveDiags...)
+	if sensitiveFields == nil {
+		sensitiveFields = []string{}
+	}
 	action := client.SubmitAction{
-		Type:    a.Type.ValueString(),
-		Name:    a.Name.ValueString(),
-		Enabled: valueBoolOr(a.Enabled, true),
+		SensitiveFields: sensitiveFields,
+		Type:            a.Type.ValueString(),
+		Name:            a.Name.ValueString(),
+		Enabled:         valueBoolOr(a.Enabled, true),
 	}
 	if !a.ID.IsNull() && !a.ID.IsUnknown() && a.ID.ValueString() != "" {
 		id := a.ID.ValueString()
@@ -344,6 +352,7 @@ func (r *formResource) apply(ctx context.Context, f *client.Form, m *formResourc
 			Type:             types.StringValue(f.Type),
 			Rule:             types.StringValue(f.Rule),
 			Required:         types.BoolValue(f.Required),
+			Sensitive:        boolFromResponse(f.Sensitive, types.BoolNull(), types.BoolValue(false)),
 			ValidationConfig: types.MapNull(types.StringType),
 			Options:          types.MapNull(types.StringType),
 		}
@@ -515,7 +524,11 @@ func orderSubmitActions(prior []submitActionModel, incoming []client.SubmitActio
 }
 
 func actionToModel(a client.SubmitAction) submitActionModel {
+	if a.SensitiveFields == nil {
+		a.SensitiveFields = []string{}
+	}
 	m := submitActionModel{
+		SensitiveFields:    toStringSet(a.SensitiveFields),
 		ID:                 strFromPtr(a.ID),
 		Type:               types.StringValue(a.Type),
 		Name:               types.StringValue(a.Name),

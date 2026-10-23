@@ -140,6 +140,7 @@ output "form_id" {
 - `allowed_domains` (List of String) Up to 50 hostnames the form may be submitted from, used when `enable_allowed_domains` is on. A domain also covers its subdomains, so `example.com` allows `www.example.com`. Use the bare lowercase hostname (no scheme, path, port or `*.` prefix; punycode for internationalized domains).
 - `captcha_secret_key` (String, Sensitive) Captcha secret key. Required when `captcha_type` is not `None`. Write-only: the value is sent on create/update but never read back into state, so importing a form does not capture it and an apply never overwrites the existing secret unless you set this explicitly.
 - `captcha_type` (String) Captcha provider: `None`, `RecaptchaV2`, `RecaptchaV3`, `HCaptcha`, or `Turnstile` (Cloudflare Turnstile).
+- `confirm_sensitive_fields` (Boolean) Explicitly acknowledge sharing selected sensitive originals with action destinations, or disabling protection for future submissions. Required by the API for new approvals and destination/configuration changes. Review every plan before applying; keeping true also acknowledges later applies. This never grants access to original submission values.
 - `enable_ai_spam_review` (Boolean) Send submissions the rule-based spam checks are unsure about to an AI model for a second opinion. When not set, the current server value is kept: new forms are created with it enabled, forms that existed before the setting was introduced have it disabled. Set it explicitly to manage it.
 - `enable_allowed_domains` (Boolean) Only accept submissions whose `Origin` header (or `Referer`, when there is no `Origin`) matches one of `allowed_domains`. Requires at least one domain. Server-side forms skip this check.
 - `enable_honeypot` (Boolean) Enable the honeypot spam trap field.
@@ -172,6 +173,7 @@ Optional:
 - `options` (Map of String) UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `["Small","Large"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `isNameField` (Text with rule `None`, `true` marks the field as a person's name so digits in the submitted value count toward the spam score; the dashboard's Name field template sets it); `maxFiles` (File, max number of files per submission).
 - `required` (Boolean) Whether the field is required.
 - `rule` (String) Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys.
+- `sensitive` (Boolean) Encrypt this field at rest and mask ordinary reads. File fields cannot be sensitive. Omitted keeps the server policy on refresh/import; new fields default to false. Explicit false requires confirm_sensitive_fields when removing protection and affects future submissions only.
 - `validation_config` (Map of String) Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes).
 
 
@@ -394,6 +396,7 @@ Optional:
 - `recipient` (String) Email: recipient(s), comma-separated. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{form.email}}` to send to an address submitted in the form).
 - `reply_to` (String) Email: reply-to address. Supports `{{token}}` placeholders (e.g. `{{form.email}}`).
 - `run_condition` (Block List) Optional: only run when these conditions match (Pro plan). (see [below for nested schema](#nestedblock--submit_action--run_condition))
+- `sensitive_fields` (Set of String) Sensitive field names whose originals this action may use, including in templates, mappings and conditions. Omitted preserves current approval; an explicit empty set revokes it. New or changed sharing requires confirm_sensitive_fields. Other fields remain masked; webhook URLs always use masked values.
 - `sheet_name` (String) Google Sheets: worksheet tab name.
 - `smtp_connection_id` (String) Email: send via a BYO SMTP connection (`staticform_smtp_connection` ID). Mutually exclusive with `email_domain_id`.
 - `spreadsheet_id` (String) Google Sheets: spreadsheet ID.

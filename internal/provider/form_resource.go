@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -53,6 +54,7 @@ type fieldModel struct {
 	Type             types.String `tfsdk:"type"`
 	Rule             types.String `tfsdk:"rule"`
 	Required         types.Bool   `tfsdk:"required"`
+	Sensitive        types.Bool   `tfsdk:"sensitive"`
 	ValidationConfig types.Map    `tfsdk:"validation_config"`
 	Options          types.Map    `tfsdk:"options"`
 }
@@ -81,11 +83,12 @@ type runConditionModel struct {
 }
 
 type submitActionModel struct {
-	ID           types.String        `tfsdk:"id"`
-	Type         types.String        `tfsdk:"type"`
-	Name         types.String        `tfsdk:"name"`
-	Enabled      types.Bool          `tfsdk:"enabled"`
-	RunCondition []runConditionModel `tfsdk:"run_condition"`
+	ID              types.String        `tfsdk:"id"`
+	Type            types.String        `tfsdk:"type"`
+	Name            types.String        `tfsdk:"name"`
+	Enabled         types.Bool          `tfsdk:"enabled"`
+	RunCondition    []runConditionModel `tfsdk:"run_condition"`
+	SensitiveFields types.Set           `tfsdk:"sensitive_fields"`
 
 	// SendEmailAction
 	Recipient         types.String            `tfsdk:"recipient"`
@@ -178,6 +181,7 @@ type redirectModel struct {
 }
 
 type formResourceModel struct {
+	ConfirmSensitiveFields  types.Bool          `tfsdk:"confirm_sensitive_fields"`
 	ID                      types.String        `tfsdk:"id"`
 	Name                    types.String        `tfsdk:"name"`
 	SubmissionMode          types.String        `tfsdk:"submission_mode"`
@@ -241,6 +245,17 @@ func (r *formResource) ValidateConfig(ctx context.Context, req resource.Validate
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	for i, field := range m.Fields {
+		if field.Sensitive.ValueBool() && field.Type.ValueString() == "File" {
+			resp.Diagnostics.AddAttributeError(path.Root("field").AtListIndex(i).AtName("sensitive"), "File fields cannot be sensitive", "Sensitivity protects field values, not uploaded file bytes.")
+		}
+	}
+	for _, action := range m.SubmitActions {
+		if !action.SensitiveFields.IsUnknown() && len(action.SensitiveFields.Elements()) > 0 {
+			resp.Diagnostics.AddWarning("Sensitive field sharing", "This action is configured to receive selected sensitive originals. Review its destination, templates, mappings and conditions before applying. New or changed sharing requires confirm_sensitive_fields = true.")
+		}
 	}
 
 	if m.EnableAllowedDomains.ValueBool() && !m.AllowedDomains.IsUnknown() && len(m.AllowedDomains.Elements()) == 0 {
@@ -367,6 +382,9 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				ElementType:         types.StringType,
 				MarkdownDescription: "Field names whose values are never sent to the AI spam reviewer, for example fields holding sensitive personal data. Matched case-insensitively. Empty or unset means all fields may be sent.",
 			},
+			"confirm_sensitive_fields": schema.BoolAttribute{
+				Optional: true, MarkdownDescription: "Explicitly acknowledge sharing selected sensitive originals with action destinations, or disabling protection for future submissions. Required by the API for new approvals and destination/configuration changes. Review every plan before applying; keeping true also acknowledges later applies. This never grants access to original submission values.",
+			},
 			"tags": schema.SetAttribute{
 				Optional:            true,
 				ElementType:         types.StringType,
@@ -383,6 +401,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"type":              schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Text", "File", "Number", "Boolean", "Enum", "Datetime", "Date")}, MarkdownDescription: "`Text`, `File`, `Number`, `Boolean`, `Enum`, `Datetime`, or `Date`."},
 						"rule":              schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("None"), Validators: []validator.String{stringvalidator.OneOf("None", "Email", "Number", "PositiveNumber", "NumberRange", "Website", "Before", "After", "Between", "FileExtension", "FileSize")}, MarkdownDescription: "Validation rule: `None`, `Email`, `Website`, `Number`, `PositiveNumber`, `NumberRange`, `Before`, `After`, `Between`, `FileExtension`, or `FileSize`. Some rules require matching `validation_config` keys."},
 						"required":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), MarkdownDescription: "Whether the field is required."},
+						"sensitive":         schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}, MarkdownDescription: "Encrypt this field at rest and mask ordinary reads. File fields cannot be sensitive. Omitted keeps the server policy on refresh/import; new fields default to false. Explicit false requires confirm_sensitive_fields when removing protection and affects future submissions only."},
 						"validation_config": schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Validation parameters (string values) keyed by rule: `minLength`/`maxLength` (Text, character bounds); `min`/`max` (Number, rule `NumberRange`); `before`/`after` (Date/Datetime, ISO-8601, rules `Before`/`After`/`Between`); `extensions` (File, rule `FileExtension`, comma-separated without dots, e.g. `pdf,doc,docx`); `maxFileSizeBytes` (File, rule `FileSize`, size in bytes)."},
 						"options":           schema.MapAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "UI/behaviour options (string values): `options` (Enum, required — JSON array of choices, e.g. `[\"Small\",\"Large\"]`); `allowMultiple` (Enum, `true`/`false` for multi-select); `isTextarea` (Text, `true`/`false` to render a multiline textarea); `isNameField` (Text with rule `None`, `true` marks the field as a person's name so digits in the submitted value count toward the spam score; the dashboard's Name field template sets it); `maxFiles` (File, max number of files per submission)."},
 					},
@@ -397,6 +416,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"name":    schema.StringAttribute{Required: true, MarkdownDescription: "Action label."},
 						"enabled": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), MarkdownDescription: "Whether the action runs."},
 
+						"sensitive_fields":   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()}, Validators: []validator.Set{setvalidator.ValueStringsAre(stringvalidator.LengthBetween(1, 255))}, MarkdownDescription: "Sensitive field names whose originals this action may use, including in templates, mappings and conditions. Omitted preserves current approval; an explicit empty set revokes it. New or changed sharing requires confirm_sensitive_fields. Other fields remain masked; webhook URLs always use masked values."},
 						"recipient":          schema.StringAttribute{Optional: true, MarkdownDescription: "Email: recipient(s), comma-separated. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{form.email}}` to send to an address submitted in the form)."},
 						"reply_to":           schema.StringAttribute{Optional: true, MarkdownDescription: "Email: reply-to address. Supports `{{token}}` placeholders (e.g. `{{form.email}}`)."},
 						"subject":            schema.StringAttribute{Optional: true, MarkdownDescription: "Email: subject. Supports the same `{{token}}` placeholders as `body_template` (e.g. `{{formName}}`, `{{form.email}}`, `{{timestamp}}`)."},

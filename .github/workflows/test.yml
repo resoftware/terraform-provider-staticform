@@ -54,3 +54,38 @@ jobs:
         run: |
           git diff --compact-summary --exit-code || \
             (echo "Run 'make docs' and commit the result." && exit 1)
+
+  sensitivity-protocol:
+    name: Sensitive form lifecycle (${{ matrix.cli }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cli: [terraform, opentofu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v3
+        if: matrix.cli == 'terraform'
+        with:
+          terraform_version: '1.13.5'
+          terraform_wrapper: false
+      - uses: opentofu/setup-opentofu@v1
+        if: matrix.cli == 'opentofu'
+        with:
+          tofu_version: '1.11.8'
+          tofu_wrapper: false
+      - name: Apply, refresh, import and revoke against the local fake API
+        env:
+          TF_ACC: '1'
+          CLI: ${{ matrix.cli }}
+        run: |
+          if [ "$CLI" = "opentofu" ]; then
+            export TF_ACC_PROVIDER_HOST=registry.opentofu.org
+            export TF_ACC_TERRAFORM_PATH="$(command -v tofu)"
+          else
+            export TF_ACC_TERRAFORM_PATH="$(command -v terraform)"
+          fi
+          go test ./internal/provider -run '^TestSensitiveFormFakeAPI$' -count=1
