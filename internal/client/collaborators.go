@@ -49,22 +49,18 @@ func (c *Client) InviteCollaborator(ctx context.Context, formID string, req Invi
 	return &out, nil
 }
 
-// ListInvitations returns pending invitations for a form.
+// ListInvitations returns the pending invitations for a form.
 func (c *Client) ListInvitations(ctx context.Context, formID string) ([]Invitation, error) {
-	var out []Invitation
-	if err := c.do(ctx, http.MethodGet, "/api/v1/forms/"+formID+"/invitations", nil, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return listPages(func(page int) ([]Invitation, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/forms/"+formID+"/invitations", page, func(items []Invitation) []Invitation { return items })
+	})
 }
 
 // ListCollaborators returns accepted collaborators for a form (includes owner).
 func (c *Client) ListCollaborators(ctx context.Context, formID string) ([]Collaborator, error) {
-	var out []Collaborator
-	if err := c.do(ctx, http.MethodGet, "/api/v1/forms/"+formID+"/collaborators", nil, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return listPages(func(page int) ([]Collaborator, int, error) {
+		return getHeaderCountedPage(ctx, c, "/api/v1/forms/"+formID+"/collaborators", page, func(items []Collaborator) []Collaborator { return items })
+	})
 }
 
 // FindCollaboratorByEmail returns the accepted collaborator matching email, if any.

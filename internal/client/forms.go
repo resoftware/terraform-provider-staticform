@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
@@ -196,20 +195,23 @@ type PaymentLineItem struct {
 
 // PaymentSettings is a form's Stripe payment configuration.
 type PaymentSettings struct {
-	Enabled          bool                     `json:"enabled"`
-	ConnectionID     *string                  `json:"connectionId,omitempty"`
-	Currency         string                   `json:"currency"`
-	Mode             string                   `json:"mode"`
-	FixedRules       []FixedPaymentRule       `json:"fixedRules,omitempty"`
-	FieldAmountRules []FieldAmountPaymentRule `json:"fieldAmountRules,omitempty"`
-	LineItems        []PaymentLineItem        `json:"lineItems,omitempty"`
+	Enabled                  bool                     `json:"enabled"`
+	ConnectionID             *string                  `json:"connectionId,omitempty"`
+	Currency                 string                   `json:"currency"`
+	Mode                     string                   `json:"mode"`
+	PaymentRequiredCondition *ConditionGroup          `json:"paymentRequiredCondition,omitempty"`
+	FixedRules               []FixedPaymentRule       `json:"fixedRules,omitempty"`
+	FieldAmountRules         []FieldAmountPaymentRule `json:"fieldAmountRules,omitempty"`
+	LineItems                []PaymentLineItem        `json:"lineItems,omitempty"`
 	// Name of the email field whose value prefills Stripe Checkout. Nil = use the first email field.
 	CustomerEmailFieldName *string `json:"customerEmailFieldName,omitempty"`
 }
 
 // FormRequest is the create/update body for a form. On update the API leaves
-// omitted settings unchanged, so the list pointers (AllowedDomains,
-// AiSpamReviewExcludedFields) are set to an empty slice to clear a list.
+// omitted settings unchanged, except PaymentSettings, which it replaces
+// wholesale: omitting it removes the payment configuration. The list pointers
+// (AllowedDomains, AiSpamReviewExcludedFields) are set to an empty slice to
+// clear a list.
 type FormRequest struct {
 	Name                       string            `json:"name"`
 	Fields                     []Field           `json:"fields"`
@@ -319,24 +321,16 @@ type Submission struct {
 
 // ListSubmissions returns all (non-spam) submissions for a form, paginated.
 func (c *Client) ListSubmissions(ctx context.Context, formID string) ([]Submission, error) {
-	var all []Submission
-	page := 1
-	for {
+	return listPages(func(page int) ([]Submission, int, error) {
 		var resp struct {
-			Items      []Submission `json:"items"`
+			Data       []Submission `json:"data"`
 			TotalCount int          `json:"totalCount"`
 		}
-		path := fmt.Sprintf("/api/v1/forms/%s/submissions?pageNumber=%d&pageSize=100", formID, page)
-		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-			return nil, err
+		if err := c.do(ctx, http.MethodGet, pagedPath("/api/v1/forms/"+formID+"/submissions", "pageNumber", page), nil, &resp); err != nil {
+			return nil, 0, err
 		}
-		all = append(all, resp.Items...)
-		if len(resp.Items) == 0 || len(all) >= resp.TotalCount {
-			break
-		}
-		page++
-	}
-	return all, nil
+		return resp.Data, resp.TotalCount, nil
+	})
 }
 
 // FormListItem is a lightweight entry from the paginated forms list.
@@ -347,24 +341,14 @@ type FormListItem struct {
 
 // ListForms returns all forms accessible to the API key, following pagination.
 func (c *Client) ListForms(ctx context.Context) ([]FormListItem, error) {
-	var all []FormListItem
-	page := 1
-	for {
+	return listPages(func(page int) ([]FormListItem, int, error) {
 		var resp struct {
 			Data       []FormListItem `json:"data"`
 			TotalCount int            `json:"totalCount"`
-			PageNumber int            `json:"pageNumber"`
-			PageSize   int            `json:"pageSize"`
 		}
-		path := fmt.Sprintf("/api/v1/forms?pageNumber=%d&pageSize=100", page)
-		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-			return nil, err
+		if err := c.do(ctx, http.MethodGet, pagedPath("/api/v1/forms", "pageNumber", page), nil, &resp); err != nil {
+			return nil, 0, err
 		}
-		all = append(all, resp.Data...)
-		if len(resp.Data) == 0 || len(all) >= resp.TotalCount {
-			break
-		}
-		page++
-	}
-	return all, nil
+		return resp.Data, resp.TotalCount, nil
+	})
 }
