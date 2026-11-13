@@ -410,6 +410,9 @@ func paymentToClient(ctx context.Context, p paymentModel) (*client.PaymentSettin
 		Currency:               optStr(p.Currency),
 		Mode:                   optStr(p.Mode),
 		CustomerEmailFieldName: strPtr(optStr(p.CustomerEmailFieldName)),
+		CreateInvoice:          p.CreateInvoice.ValueBool(),
+		AutomaticTax:           p.AutomaticTax.ValueBool(),
+		CollectTaxId:           p.CollectTaxID.ValueBool(),
 	}
 	for _, r := range p.FixedRule {
 		ps.FixedRules = append(ps.FixedRules, client.FixedPaymentRule{
@@ -446,6 +449,9 @@ func paymentToModel(p *client.PaymentSettings) paymentModel {
 		Currency:               types.StringValue(p.Currency),
 		Mode:                   types.StringValue(p.Mode),
 		CustomerEmailFieldName: nullIfEmptyPtr(p.CustomerEmailFieldName),
+		CreateInvoice:          types.BoolValue(p.CreateInvoice),
+		AutomaticTax:           types.BoolValue(p.AutomaticTax),
+		CollectTaxID:           types.BoolValue(p.CollectTaxId),
 	}
 	for _, r := range p.FixedRules {
 		m.FixedRule = append(m.FixedRule, fixedRuleModel{
