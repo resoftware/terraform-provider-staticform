@@ -190,7 +190,7 @@ Optional:
 
 - `automatic_tax` (Boolean) Calculate tax with Stripe Tax (Stripe Checkout `automatic_tax`). Prices are tax-inclusive: the buyer pays the configured amount and the tax is part of it. Stripe Tax must be enabled in the Stripe account. Defaults to `false`.
 - `collect_tax_id` (Boolean) Let business buyers enter a VAT or other tax ID on Stripe Checkout (`tax_id_collection`). Defaults to `false`.
-- `create_invoice` (Boolean) Have Stripe issue a paid invoice for every payment (Stripe Checkout `invoice_creation`). Stripe emails it when the Stripe account sends invoice emails. Defaults to `false`.
+- `create_invoice` (Boolean) Have Stripe issue a paid invoice for every payment (Stripe Checkout `invoice_creation`). Stripe emails it with the receipt when the Stripe account has automatic receipts for successful payments on. Defaults to `false`.
 - `customer_email_field_name` (String) Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used.
 - `field_amount_rule` (Block List) Amount-from-field rules (mode `FieldAmount`). (see [below for nested schema](#nestedblock--payment--field_amount_rule))
 - `fixed_rule` (Block List) Fixed-amount pricing rules (mode `Fixed`). (see [below for nested schema](#nestedblock--payment--fixed_rule))

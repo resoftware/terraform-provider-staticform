@@ -502,7 +502,7 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"customer_email_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used."},
 						"create_invoice": schema.BoolAttribute{
 							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
-							MarkdownDescription: "Have Stripe issue a paid invoice for every payment (Stripe Checkout `invoice_creation`). Stripe emails it when the Stripe account sends invoice emails. Defaults to `false`.",
+							MarkdownDescription: "Have Stripe issue a paid invoice for every payment (Stripe Checkout `invoice_creation`). Stripe emails it with the receipt when the Stripe account has automatic receipts for successful payments on. Defaults to `false`.",
 						},
 						"automatic_tax": schema.BoolAttribute{
 							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
