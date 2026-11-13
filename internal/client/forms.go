@@ -207,6 +207,12 @@ type PaymentSettings struct {
 	LineItems                []PaymentLineItem        `json:"lineItems,omitempty"`
 	// Name of the email field whose value prefills Stripe Checkout. Nil = use the first email field.
 	CustomerEmailFieldName *string `json:"customerEmailFieldName,omitempty"`
+	// Stripe issues a paid invoice after the payment.
+	CreateInvoice bool `json:"createInvoice"`
+	// Stripe Tax calculates the tax; prices are tax-inclusive.
+	AutomaticTax bool `json:"automaticTax"`
+	// Business buyers can enter a tax ID on Checkout.
+	CollectTaxId bool `json:"collectTaxId"`
 }
 
 // FormRequest is the create/update body for a form. On update the API leaves

@@ -336,3 +336,26 @@ func TestRedirectAndPaymentToModelNormalizeEmptyStrings(t *testing.T) {
 		}
 	}
 }
+
+func TestPaymentInvoiceAndTaxOptionsRoundTrip(t *testing.T) {
+	model := paymentModel{
+		ConnectionID:  types.StringValue("conn-1"),
+		Currency:      types.StringValue("eur"),
+		Mode:          types.StringValue("Fixed"),
+		CreateInvoice: types.BoolValue(true),
+		AutomaticTax:  types.BoolValue(true),
+		CollectTaxID:  types.BoolValue(false),
+	}
+	ps, d := paymentToClient(context.Background(), model)
+	if d.HasError() {
+		t.Fatalf("paymentToClient: %v", d)
+	}
+	if !ps.CreateInvoice || !ps.AutomaticTax || ps.CollectTaxId {
+		t.Fatalf("client settings: got invoice=%v tax=%v taxId=%v", ps.CreateInvoice, ps.AutomaticTax, ps.CollectTaxId)
+	}
+	back := paymentToModel(ps)
+	if !back.CreateInvoice.Equal(types.BoolValue(true)) || !back.AutomaticTax.Equal(types.BoolValue(true)) ||
+		!back.CollectTaxID.Equal(types.BoolValue(false)) {
+		t.Fatalf("model: got invoice=%s tax=%s taxId=%s", back.CreateInvoice, back.AutomaticTax, back.CollectTaxID)
+	}
+}

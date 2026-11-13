@@ -229,6 +229,9 @@ type paymentModel struct {
 	Currency                 types.String           `tfsdk:"currency"`
 	Mode                     types.String           `tfsdk:"mode"`
 	CustomerEmailFieldName   types.String           `tfsdk:"customer_email_field_name"`
+	CreateInvoice            types.Bool             `tfsdk:"create_invoice"`
+	AutomaticTax             types.Bool             `tfsdk:"automatic_tax"`
+	CollectTaxID             types.Bool             `tfsdk:"collect_tax_id"`
 	PaymentRequiredCondition []runConditionModel    `tfsdk:"payment_required_condition"`
 	FixedRule                []fixedRuleModel       `tfsdk:"fixed_rule"`
 	FieldAmountRule          []fieldAmountRuleModel `tfsdk:"field_amount_rule"`
@@ -497,6 +500,18 @@ func (r *formResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 						"currency":                  schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.RegexMatches(currencyRegexp, "must be a 3-letter ISO 4217 currency code")}, MarkdownDescription: "ISO 4217 currency code (lowercase, e.g. `eur`)."},
 						"mode":                      schema.StringAttribute{Required: true, Validators: []validator.String{stringvalidator.OneOf("Fixed", "FieldAmount", "LineItems")}, MarkdownDescription: "`Fixed`, `FieldAmount`, or `LineItems`."},
 						"customer_email_field_name": schema.StringAttribute{Optional: true, MarkdownDescription: "Name of the email field whose value prefills the Stripe Checkout email. When omitted, the first field with the email validation rule is used."},
+						"create_invoice": schema.BoolAttribute{
+							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+							MarkdownDescription: "Have Stripe issue a paid invoice for every payment (Stripe Checkout `invoice_creation`). Stripe emails it when the Stripe account sends invoice emails. Defaults to `false`.",
+						},
+						"automatic_tax": schema.BoolAttribute{
+							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+							MarkdownDescription: "Calculate tax with Stripe Tax (Stripe Checkout `automatic_tax`). Prices are tax-inclusive: the buyer pays the configured amount and the tax is part of it. Stripe Tax must be enabled in the Stripe account. Defaults to `false`.",
+						},
+						"collect_tax_id": schema.BoolAttribute{
+							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+							MarkdownDescription: "Let business buyers enter a VAT or other tax ID on Stripe Checkout (`tax_id_collection`). Defaults to `false`.",
+						},
 					},
 					Blocks: map[string]schema.Block{
 						"payment_required_condition": conditionGroupBlock("Optional: payment is only required when these conditions match the submission; otherwise the form is submitted without a charge. " +
